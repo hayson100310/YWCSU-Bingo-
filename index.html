@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bingo 票務管理系統</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='%231B3A6B'/%3E%3Cg fill='%23FFD93D'%3E%3Ccircle cx='22' cy='22' r='6'/%3E%3Ccircle cx='42' cy='22' r='6'/%3E%3Ccircle cx='22' cy='42' r='6'/%3E%3Ccircle cx='42' cy='42' r='6'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='5' fill='%23E63946'/%3E%3C/svg%3E">
+<style>
+/* ============================================================
+   全域設定
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{
+  font-family:"PingFang TC","Microsoft JhengHei","Noto Sans TC","Noto Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:#eef1f6;color:#1c2333;font-size:15px;line-height:1.55;min-height:100%;
+  display:flex;flex-direction:column;
+  -webkit-text-size-adjust:100%;
+}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit;font-size:16px}
+.muted{color:#8a93a6}
+.sub{font-size:12px;color:#8a93a6;font-weight:400}
+
+/* ============================================================
+   頂部導覽列
+   ============================================================ */
+.app-header{
+  position:sticky;top:0;z-index:60;
+  background:linear-gradient(120deg,#1B3A6B 0%,#28508f 100%);
+  color:#fff;box-shadow:0 4px 14px rgba(15,30,60,.25);
+}
+.app-title{
+  display:flex;align-items:center;gap:10px;padding:10px 16px 4px;
+  max-width:1200px;margin:0 auto;flex-wrap:wrap;
+}
+.app-title .logo{
+  width:30px;height:30px;border-radius:8px;flex:none;
+  background:linear-gradient(135deg,#FFD93D,#FF9F1C);
+  display:flex;align-items:center;justify-content:center;font-weight:900;color:#1B3A6B;font-size:15px;
+}
+.app-title h1{font-size:17px;font-weight:700;letter-spacing:.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync-badge{font-size:11px;opacity:.9;background:rgba(255,255,255,.15);padding:3px 10px;border-radius:999px;white-space:nowrap}
+.operator{display:flex;align-items:center;gap:6px;font-size:12px;color:#dbe6f7}
+.operator input{
+  border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:4px 10px;
+  font-size:12px;background:rgba(255,255,255,.12);color:#fff;width:100px;outline:none;
+}
+.operator input::placeholder{color:rgba(255,255,255,.5)}
+.operator input:focus{border-color:#7EC8E3;background:rgba(255,255,255,.2)}
+.tab-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 12px 12px;max-width:1200px;margin:0 auto}
+.tab{
+  border:none;background:transparent;font-family:inherit;cursor:pointer;
+  display:block;text-align:center;color:#dbe6f7;text-decoration:none;
+  font-size:14px;font-weight:600;padding:8px 4px;border-radius:10px;transition:.15s;
+}
+.tab:hover{background:rgba(255,255,255,.1)}
+.tab.active{background:#fff;color:#1B3A6B;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.tab .tab-sub{display:block;font-size:10px;font-weight:400;opacity:.7;margin-top:1px}
+footer {
+    text-align: center;
+    padding: 20px;
+    background-color: #f1f1f1;
+}
+
+
+/* ============================================================
+   版面與卡片
+   ============================================================ */
+main{max-width:1200px;margin:0 auto;padding:16px;flex:1;width:100%}
+.page{display:none}
+.page.active{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.card{
+  background:#fff;border-radius:14px;box-shadow:0 6px 18px rgba(20,30,60,.06);
+  padding:16px 18px;margin-bottom:16px;
+}
+.card h2{
+  font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;
+  padding-left:10px;border-left:4px solid #1B3A6B;color:#1c2333;
+}
+.card h2 .h2-tag{font-size:11px;font-weight:500;color:#8a93a6;margin-left:auto}
+.hint{font-size:12px;color:#8a93a6;margin-top:8px;line-height:1.6}
+.hint kbd{
+  background:#eef2f9;border:1px solid #d5dceb;border-bottom-width:2px;
+  border-radius:5px;padding:1px 6px;font-size:11px;font-family:inherit;font-weight:700;
+}
+.warn-text{color:#E63946;font-weight:700}
+
+/* ============================================================
+   表單元件
+   ============================================================ */
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:150px}
+.field>label{font-size:12px;color:#6b7488;font-weight:600}
+input[type=number],input[type=text],input[type=password],select{
+  border:1px solid #d8dfeb;border-radius:10px;padding:9px 12px;background:#f8fafc;min-width:0;
+  width:100%;transition:.15s;font-variant-numeric:tabular-nums;outline:none;color:#1c2333;
+}
+input:focus,select:focus{outline:2px solid #7EC8E3;border-color:#1B3A6B;background:#fff}
+
+/* ============================================================
+   按鈕
+   ============================================================ */
+.btn{
+  border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;
+  background:#e8edf5;color:#1c2333;transition:.15s;white-space:nowrap;
+}
+.btn:hover{filter:brightness(.95)}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:#1B3A6B;color:#fff}
+.btn.primary:hover{background:#24478a}
+.btn.warn{background:#FF9F1C;color:#3a2400}
+.btn.warn:hover{background:#e88c0d}
+.btn.danger{background:#E63946;color:#fff}
+.btn.danger:hover{background:#cf2b38}
+.btn.small{padding:7px 12px;font-size:13px}
+.btn.full{width:100%;margin-bottom:12px}
+.btn-col{display:flex;flex-direction:column;gap:10px}
+.btn-ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.3)}
+
+/* ============================================================
+   表格
+   ============================================================ */
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid #e6ebf4;-webkit-overflow-scrolling:touch}
+#adminTable{width:100%;border-collapse:collapse;font-size:13.5px;min-width:780px}
+#adminTable th{
+  background:#f1f4fa;text-align:left;padding:9px 10px;font-size:12px;color:#6b7488;
+  border-bottom:2px solid #e3e8f0;white-space:nowrap;font-weight:700;
+}
+#adminTable td{padding:9px 10px;border-bottom:1px solid #eef1f7;vertical-align:middle;font-variant-numeric:tabular-nums}
+#adminTable tr:last-child td{border-bottom:none}
+#adminTable tr.used-row{background:#f4f5f7}
+#adminTable tr.used-row td{opacity:.55}
+#adminTable .stacks-input,#adminTable .remain-input{width:82px;padding:6px 9px;font-size:14px}
+#adminTable .apply-row{padding:6px 12px;font-size:12px;border-radius:8px}
+/* 剩餘疊數欄 */
+#adminTable .stack-remain-cell{white-space:nowrap;font-weight:700}
+#adminTable .stack-remain-cell .sr-main{color:#1B3A6B}
+#adminTable .stack-remain-cell .sr-loose{color:#c26a00;font-size:12.5px}
+#adminTable .stack-remain-cell .sr-out{color:#E63946;font-weight:800}
+
+/* 色塊 */
+.swatch{
+  display:inline-block;width:22px;height:22px;border-radius:7px;
+  vertical-align:middle;margin-right:8px;border:1px solid rgba(0,0,0,.12);
+}
+.dot{width:22px;height:22px;border-radius:7px;flex:none;display:inline-block;border:1px solid rgba(0,0,0,.08)}
+
+/* 標籤 */
+.tag{
+  display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;
+  background:#eef1f6;color:#8a93a6;font-weight:700;white-space:nowrap;
+}
+.tag.used{background:#dcfce7;color:#15803d}
+.tag-warn{display:inline-block;background:#FFD93D;color:#5a4000;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:4px;white-space:nowrap}
+.tag-out{display:inline-block;background:#E63946;color:#fff;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:4px;white-space:nowrap}
+.tag-used{display:inline-block;background:#2e9e6b;color:#fff;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap}
+
+/* ============================================================
+   操作紀錄
+   ============================================================ */
+.log-list{list-style:none;max-height:320px;overflow:auto}
+.log-list li{
+  display:flex;gap:8px;padding:7px 4px;border-bottom:1px dashed #e6ebf4;
+  font-size:13px;align-items:baseline;
+}
+.log-list li:last-child{border-bottom:none}
+.log-list li.empty{color:#8a93a6;justify-content:center;padding:20px}
+.log-time{color:#9aa3b5;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.log-who{font-weight:700;color:#1B3A6B;white-space:nowrap}
+.log-act{color:#6b7488;word-break:break-all}
+
+/* ============================================================
+   通道頁
+   ============================================================ */
+#page-cash{--theme:#2e9e6b}
+#page-epay{--theme:#2a4d8f}
+.channel-page .card h2{color:var(--theme);border-left-color:var(--theme)}
+.channel-page .btn.primary{background:var(--theme);color:#fff}
+.channel-page .btn.primary:hover{filter:brightness(1.1)}
+.channel-page input:focus{outline-color:var(--theme);border-color:var(--theme)}
+.channel-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}
+.span-full{grid-column:1/-1}
+
+.current-color-box{
+  border-radius:16px;min-height:150px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:6px;text-align:center;padding:20px;
+  font-size:clamp(34px,7vw,68px);font-weight:900;letter-spacing:5px;
+  background:#f0f3f9;color:#8a93a6;border:2px dashed #ccd4e2;transition:.25s;
+  user-select:none;
+}
+.current-color-box.empty{background:#f0f3f9;color:#8a93a6;border:2px dashed #ccd4e2}
+.current-meta{
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:14px;font-size:13.5px;color:#6b7488;font-weight:600;
+}
+.current-meta b{color:var(--theme);font-size:17px;font-variant-numeric:tabular-nums}
+
+.color-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.color-pick{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  border:2px solid #e3e8f0;border-radius:12px;padding:9px 6px;background:#fbfcfe;
+  font-size:12.5px;font-weight:600;color:#1c2333;transition:.12s;font-family:inherit;
+}
+.color-pick:hover:not(:disabled){border-color:var(--theme);transform:translateY(-1px)}
+.color-pick.active{border-color:var(--theme);background:#eef4ff;box-shadow:0 0 0 2px rgba(27,58,107,.15)}
+.color-pick:disabled{opacity:.35;cursor:not-allowed;filter:grayscale(.35)}
+.color-pick .cp-tag{font-size:10.5px;font-weight:600;color:#8a93a6}
+
+.used-grid{display:flex;flex-wrap:wrap;gap:8px}
+.used-chip{
+  display:flex;align-items:center;gap:6px;border-radius:999px;padding:4px 12px 4px 5px;
+  font-size:12.5px;font-weight:700;background:#eef1f6;color:#9aa3b5;
+  border:1px dashed #ccd4e2;
+}
+.used-chip.on{border-style:solid;border-color:transparent;color:#1c2333}
+
+.info-panel{display:grid;gap:8px}
+.info-row{display:flex;justify-content:space-between;background:#f6f8fc;border-radius:10px;padding:9px 12px;font-size:13.5px}
+.info-row b{font-size:15px;font-variant-numeric:tabular-nums}
+
+/* ============================================================
+   顯示看板
+   ============================================================ */
+#page-board{display:none;max-width:none;width:100%;padding:10px 14px;margin:0}
+#page-board.active{display:block}
+body.board-mode main{padding:0;overflow:hidden;max-width:none}
+
+.board{
+  background:#0f1626;border-radius:20px;padding:16px 20px;color:#e8eefb;
+  min-height:calc(100vh - 44px);display:flex;flex-direction:column;gap:12px;
+  overflow:hidden;
+}
+.board-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.board-session{font-size:20px;font-weight:800;letter-spacing:1px}
+.board-clock{font-size:14px;color:#9fb2cf;font-variant-numeric:tabular-nums;margin-top:2px}
+.board-fs{
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);
+  color:#fff;border-radius:10px;padding:8px 16px;cursor:pointer;
+  font-family:inherit;font-size:14px;font-weight:600;white-space:nowrap;
+}
+.board-fs:hover{background:rgba(255,255,255,.2)}
+
+.board-channels{display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:1 1 auto;min-height:0}
+.board-channel{display:flex;flex-direction:column;gap:8px;min-height:0}
+.board-channel-title{font-size:15px;font-weight:700;color:#c7d4ea;letter-spacing:1px}
+.board-color-box{
+  flex:1;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  text-align:center;border:2px solid rgba(255,255,255,.15);transition:.3s;
+  font-size:clamp(30px,6.5vw,110px);font-weight:900;letter-spacing:6px;padding:10px;
+}
+.board-color-box.empty{background:#22304a;color:#9fb2cf;font-size:26px;letter-spacing:2px;border-color:rgba(255,255,255,.12)}
+
+.board-bottom{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;flex:0 0 auto}
+.board-used h3,.board-remain h3{
+  font-size:15px;font-weight:700;color:#c7d4ea;margin:8px 0;letter-spacing:.5px;
+}
+.board-used-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:8px}
+.board-used-cell{
+  border-radius:12px;min-height:56px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;font-size:12.5px;font-weight:700;
+  background:#1b2536;color:#55627a;border:1px dashed #2c3a52;transition:.2s;
+}
+.board-used-cell.on{border-style:solid;border-color:transparent}
+
+.board-remain-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.board-remain-cell{
+  display:flex;align-items:center;gap:6px;padding:8px 10px;
+  border-radius:10px;background:#182338;border:1px solid #243350;
+  font-size:12.5px;font-weight:700;min-width:0;
+}
+.board-remain-cell.low{background:rgba(255,159,28,.22);color:#FFD93D}
+.board-remain-cell.out{background:rgba(230,57,70,.24);color:#ff9aa2}
+.brc-dot{width:18px;height:18px;border-radius:6px;flex:0 0 auto;border:1px solid rgba(255,255,255,.2)}
+.brc-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brc-num{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.board-suggest{
+  text-align:center;font-size:15px;color:#c7d4ea;font-weight:600;
+  background:#182338;border:1px dashed #33456a;border-radius:12px;padding:9px 14px;
+}
+.suggest-chip{display:inline-block;padding:2px 12px;border-radius:9px;margin-left:6px}
+
+/* ============================================================
+   彈窗與 Toast
+   ============================================================ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(10,18,36,.5);display:none;
+  align-items:center;justify-content:center;z-index:100;padding:18px;
+  backdrop-filter:blur(3px);
+}
+.modal-overlay.show{display:flex}
+.modal{
+  background:#fff;border-radius:16px;width:100%;max-width:440px;padding:20px;
+  box-shadow:0 24px 70px rgba(0,0,0,.35);animation:pop .18s ease;
+  max-height:88vh;overflow-y:auto;
+}
+@keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+.modal h3{font-size:16px;margin-bottom:10px;color:#1B3A6B}
+.modal-body{font-size:14px;color:#3d4760;line-height:1.75;background:#f6f8fc;border-radius:10px;padding:10px 12px}
+.modal-body p{margin:6px 0}
+.modal-body ul{margin:8px 0;padding-left:20px}
+.modal-body li{margin:3px 0}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+.modal-swatch{
+  margin:12px 0;padding:16px;border-radius:12px;text-align:center;
+  font-size:24px;font-weight:900;letter-spacing:4px;box-shadow:0 4px 14px rgba(0,0,0,.15);
+}
+#toast{
+  position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(90px);
+  background:#1c2333;color:#fff;padding:10px 20px;border-radius:999px;font-size:13.5px;
+  opacity:0;transition:all .3s;z-index:300;pointer-events:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;
+}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ============================================================
+   響應式
+   ============================================================ */
+@media (max-width:720px){
+  .app-title{padding:8px 12px 2px;gap:8px}
+  .app-title h1{font-size:15px;flex-basis:100%}
+  .operator{flex:1}
+  .operator input{flex:1;width:auto}
+  .tab-bar{gap:5px;padding:6px 8px 10px}
+  .tab{font-size:12.5px}
+  .tab .tab-sub{font-size:9px}
+  main{padding:10px}
+  .card{padding:14px}
+  .channel-wrap{grid-template-columns:1fr}
+  .board-bottom{grid-template-columns:1fr}
+  .board-used-grid{grid-template-columns:repeat(5,1fr)}
+  .board-remain-grid{grid-template-columns:repeat(3,1fr)}
+  .board-channels{grid-template-columns:1fr}
+  .board{min-height:auto;padding:12px}
+  .current-color-box{font-size:clamp(28px,8vw,48px);min-height:120px}
+}
+@media (min-width:1024px){
+  .board-color-box{min-height:24vh}
+  .board-used-cell{min-height:6.5vh}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     頂部導覽
+     ============================================================ -->
+<header class="app-header">
+  <div class="app-title">
+    <img src="logo.png" alt="YWCSU" width="30" height="30">
+    <h1>YWCSU Bingo 票務管理系統</h1>
+    <div class="operator">
+      <label for="operatorInput">操作者</label>
+      <input id="operatorInput" type="text" maxlength="12" placeholder="暱稱">
+    </div>
+    <span class="sync-badge" id="syncBadge">已就緒</span>
+  </div>
+  <nav class="tab-bar">
+    <button class="tab tab-btn active" data-tab="admin">設定<span class="tab-sub">設定／庫存／備份</span></button>
+    <button class="tab tab-btn" data-tab="cash">現金通道<span class="tab-sub">售票操作</span></button>
+    <button class="tab tab-btn" data-tab="epay">電子支付<span class="tab-sub">售票操作</span></button>
+    <button class="tab tab-btn" data-tab="board">顯示看板<span class="tab-sub">現場大螢幕</span></button>
+  </nav>
+</header>
+
+<main>
+
+  <section id="page-admin" class="page active">
+
+    <div class="card">
+      <h2>📅 場次設定</h2>
+      <div class="row">
+        <div class="field" style="flex:0 0 130px">
+          <label for="sessionNoInput">場次編號</label>
+          <input id="sessionNoInput" type="number" min="1" step="1">
+        </div>
+        <div class="field">
+          <label for="sessionNameInput">場次名稱（選填）</label>
+          <input id="sessionNameInput" type="text" maxlength="20" placeholder="例：週六晚場">
+        </div>
+        <button id="saveSessionBtn" class="btn primary" style="align-self:flex-end">儲存場次</button>
+      </div>
+      <p class="hint">場次名稱會顯示在看板標題列。</p>
+    </div>
+
+    <div class="card">
+      <h2>🎨 顏色狀態總表<span class="h2-tag">每疊 60 張</span></h2>
+      <div class="table-wrap">
+        <table id="adminTable">
+          <thead>
+            <tr>
+              <th>顏色</th><th>疊數</th><th>總票數</th>
+              <th>剩餘票數</th><th>剩餘疊數</th><th>本場狀態</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <h2>⚙️ 場次控制</h2>
+      <div class="btn-col">
+        <button id="nextSessionBtn" class="btn warn">➡️ 前往下一場</button>
+        <button id="resetBtn" class="btn danger">🗑️ 重置整個系統</button>
+        <button id="exportBtn" class="btn">⬇️ 匯出 JSON 備份</button>
+        <button id="importBtn" class="btn">⬆️ 匯入 JSON 還原</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <p class="hint">
+        「前往下一場」會自動保留兩通道目前顏色（若該顏色仍有剩餘票數）作為新場次的第一款顏色，並保留剩餘票數；已用完的顏色仍不可選用。「重置系統」需輸入管理員密碼。
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>📜 操作紀錄<span class="h2-tag">最近 20 筆</span></h2>
+      <ul id="logList" class="log-list"></ul>
+    </div>
+
+  </section>
+
+  <section id="page-cash" class="page channel-page" data-channel="cash"></section>
+  <section id="page-epay" class="page channel-page" data-channel="epay"></section>
+
+  <section id="page-board" class="page">
+    <div class="board">
+
+      <div class="board-header">
+        <div>
+          <div class="board-session" id="boardSession">第 1 場</div>
+          <div class="board-clock" id="boardClock">00:00:00</div>
+        </div>
+        <button class="board-fs" id="boardFsBtn">⛶ 全螢幕</button>
+      </div>
+
+      <div class="board-channels">
+        <div class="board-channel" data-ch="cash">
+          <div class="board-channel-title">🟢 現金通道</div>
+          <div class="board-color-box empty">尚未選擇</div>
+        </div>
+        <div class="board-channel" data-ch="epay">
+          <div class="board-channel-title">🔵 電子支付通道</div>
+          <div class="board-color-box empty">尚未選擇</div>
+        </div>
+      </div>
+
+      <div class="board-bottom">
+        <div class="board-used">
+          <h3>本場已出現顏色</h3>
+          <div class="board-used-grid" id="boardUsedGrid"></div>
+        </div>
+        <div class="board-remain">
+          <h3>各顏色剩餘票數</h3>
+          <div class="board-remain-grid" id="boardRemainGrid"></div>
+        </div>
+      </div>
+
+      <div class="board-suggest" id="boardSuggest">建議下一款：—</div>
+
+    </div>
+  </section>
+
+</main>
+<footer>
+	<p>Made by Hayson in 2026. All rights reserved</p>
+</footer>
+<div id="modalOverlay" class="modal-overlay">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody" class="modal-body"></div>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn">取消</button>
+      <button id="modalConfirm" class="btn primary">確定</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   1. 常數與資料模型
+   ================================================================ */
+const STORAGE_KEY = 'bingoSystem';
+const CHANNEL_NAME = 'bingoSystem';
+const TICKETS_PER_STACK = 60;
+const RESET_PASSWORD = '123456';
+
+const COLOR_LIST = [
+  { name:'深藍',   hex:'#1B3A6B', text:'#FFFFFF' },
+  { name:'淺藍',   hex:'#7EC8E3', text:'#1B3A6B' },
+  { name:'薄荷綠', hex:'#A8E6CF', text:'#1B3A6B' },
+  { name:'紅色',   hex:'#E63946', text:'#FFFFFF' },
+  { name:'粉色',   hex:'#FFB6C1', text:'#1B3A6B' },
+  { name:'屎色',   hex:'#8B7355', text:'#FFFFFF' },
+  { name:'黃色',   hex:'#FFD93D', text:'#1B3A6B' },
+  { name:'橙色',   hex:'#FF9F1C', text:'#1B3A6B' },
+  { name:'紫色',   hex:'#9B5DE5', text:'#FFFFFF' }
+];
+const COLOR_MAP = Object.fromEntries(COLOR_LIST.map(c => [c.name, c]));
+
+function defaultState(){
+  const colors = {};
+  COLOR_LIST.forEach(c => { colors[c.name] = { stacks:1, total:TICKETS_PER_STACK, remaining:TICKETS_PER_STACK }; });
+  return {
+    sessionNo: 1,
+    sessionName: '',
+    colors,
+    usedThisSession: [],
+    channels: { cash:{ currentColor:null }, epay:{ currentColor:null } },
+    history: [],
+    logs: []
+  };
+}
+
+function normalizeState(raw){
+  const s = (raw && typeof raw === 'object') ? raw : {};
+  const out = {
+    sessionNo: Number.isFinite(s.sessionNo) && s.sessionNo > 0 ? Math.floor(s.sessionNo) : 1,
+    sessionName: typeof s.sessionName === 'string' ? s.sessionName : '',
+    colors: {},
+    usedThisSession: [],
+    channels: { cash:{ currentColor:null }, epay:{ currentColor:null } },
+    history: Array.isArray(s.history) ? s.history : [],
+    logs: Array.isArray(s.logs) ? s.logs.slice(0, 20) : []
+  };
+  COLOR_LIST.forEach(c => {
+    const src = (s.colors && s.colors[c.name]) ? s.colors[c.name] : {};
+    const stacks = Number.isFinite(src.stacks) && src.stacks >= 0 ? Math.floor(src.stacks) : 1;
+    const total = Number.isFinite(src.total) ? src.total : stacks * TICKETS_PER_STACK;
+    let remaining = Number.isFinite(src.remaining) ? src.remaining : total;
+    remaining = Math.max(0, Math.min(remaining, Math.max(total, 0)));
+    out.colors[c.name] = { stacks, total, remaining };
+  });
+  const validNames = COLOR_LIST.map(c => c.name);
+  if (Array.isArray(s.usedThisSession)) {
+    out.usedThisSession = s.usedThisSession.filter(n => validNames.includes(n));
+  }
+  ['cash','epay'].forEach(ch => {
+    const cur = s.channels && s.channels[ch] && s.channels[ch].currentColor;
+    out.channels[ch].currentColor = validNames.includes(cur) ? cur : null;
+  });
+  ['cash','epay'].forEach(ch => {
+    const cur = out.channels[ch].currentColor;
+    if (cur && !out.usedThisSession.includes(cur)) out.usedThisSession.push(cur);
+  });
+  return out;
+}
+
+/* ================================================================
+   2. 多分頁同步
+   ================================================================ */
+let bc = null;
+try { bc = new BroadcastChannel(CHANNEL_NAME); } catch (e) { bc = null; }
+
+let state = normalizeState(readLocal());
+let operator = sessionStorage.getItem('bingoOperator') || ('分頁' + Math.random().toString(36).slice(2, 6).toUpperCase());
+sessionStorage.setItem('bingoOperator', operator);
+
+function readLocal(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.warn('讀取 localStorage 失敗，改用初始狀態', e);
+    return null;
+  }
+}
+
+function persist(){
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error('寫入 localStorage 失敗', e);
+  }
+  if (bc) { try { bc.postMessage({ type:'sync', t: Date.now() }); } catch (e) {} }
+  const badge = document.getElementById('syncBadge');
+  if (badge) badge.textContent = '已儲存 ' + new Date().toLocaleTimeString('zh-TW', {hour12:false});
+}
+
+function onExternalChange(){
+  state = normalizeState(readLocal());
+  renderAll();
+}
+
+if (bc) bc.onmessage = () => onExternalChange();
+window.addEventListener('storage', (e) => {
+  if (e.key === STORAGE_KEY) onExternalChange();
+});
+
+/* ================================================================
+   3. 小工具
+   ================================================================ */
+const $  = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function esc(str){
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
+
+function fmtTime(ts){
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function toast(msg){
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function addLog(action){
+  state.logs.unshift({ time: Date.now(), who: operator || '未命名', action });
+  if (state.logs.length > 20) state.logs.length = 20;
+}
+
+function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false){
+  return new Promise(resolve => {
+    const overlay = $('#modalOverlay');
+    const btnConfirm = $('#modalConfirm');
+    const btnCancel = $('#modalCancel');
+    $('#modalTitle').textContent = title;
+    $('#modalBody').innerHTML = bodyHTML;
+    btnConfirm.textContent = confirmText;
+    btnCancel.style.display = hideCancel ? 'none' : '';
+    overlay.classList.add('show');
+    function cleanup(){
+      overlay.classList.remove('show');
+      btnConfirm.onclick = null;
+      btnCancel.onclick = null;
+      overlay.onclick = null;
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e){
+      if (e.key === 'Escape'){ e.preventDefault(); cleanup(); resolve(false); }
+      else if (e.key === 'Enter'){ e.preventDefault(); cleanup(); resolve(true); }
+    }
+    btnConfirm.onclick = () => { cleanup(); resolve(true); };
+    btnCancel.onclick  = () => { cleanup(); resolve(false); };
+    overlay.onclick    = (e) => { if (e.target === overlay){ cleanup(); resolve(false); } };
+    document.addEventListener('keydown', onKey);
+  });
+}
+
+function askPassword(title, message, confirmText = '確定'){
+  return new Promise(resolve => {
+    const overlay = $('#modalOverlay');
+    const btnConfirm = $('#modalConfirm');
+    const btnCancel = $('#modalCancel');
+    $('#modalTitle').textContent = title;
+    $('#modalBody').innerHTML = `
+      <p>${message}</p>
+      <div class="row" style="margin-top:14px">
+        <input type="password" id="modalPasswordInput" placeholder="請輸入密碼"
+               autocomplete="off" style="flex:1;width:auto;background:#fff">
+      </div>`;
+    btnConfirm.textContent = confirmText;
+    btnCancel.style.display = '';
+    overlay.classList.add('show');
+    const input = $('#modalPasswordInput');
+    setTimeout(() => { try { input.focus(); } catch(e){} }, 50);
+    function cleanup(){
+      overlay.classList.remove('show');
+      btnConfirm.onclick = null;
+      btnCancel.onclick = null;
+      overlay.onclick = null;
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e){
+      if (e.key === 'Escape'){ e.preventDefault(); cleanup(); resolve(null); }
+      else if (e.key === 'Enter'){ e.preventDefault(); const v = input.value; cleanup(); resolve(v); }
+    }
+    btnConfirm.onclick = () => { const v = input.value; cleanup(); resolve(v); };
+    btnCancel.onclick  = () => { cleanup(); resolve(null); };
+    overlay.onclick    = (e) => { if (e.target === overlay){ cleanup(); resolve(null); } };
+    document.addEventListener('keydown', onKey);
+  });
+}
+
+/* ================================================================
+   4. 業務邏輯
+   ================================================================ */
+
+/* 計算某顏色「目前這一疊」的剩餘票數（0～60） */
+function getCurrentStackRemaining(colorName){
+  const info = state.colors[colorName];
+  if (!info || info.stacks <= 0 || info.remaining <= 0) return 0;
+  const total = info.stacks * TICKETS_PER_STACK;
+  const used = total - info.remaining;
+  const usedInCurrentStack = used % TICKETS_PER_STACK;
+  return TICKETS_PER_STACK - usedInCurrentStack;
+}
+
+/* 依「目前這一疊的剩餘票數」換算成該顏色的全域 remaining */
+function calcGlobalRemainingFromStack(colorName, stackRemain){
+  const info = state.colors[colorName];
+  const total = info.stacks * TICKETS_PER_STACK;
+  const used = total - info.remaining;
+  const usedInPrevStacks = Math.floor(used / TICKETS_PER_STACK) * TICKETS_PER_STACK;
+  const newUsed = usedInPrevStacks + (TICKETS_PER_STACK - stackRemain);
+  return Math.max(0, Math.min(total, total - newUsed));
+}
+
+/* 剩餘疊數顯示：整疊 + 散票，例如「2 + (40 張)」「1 疊」「0 疊」 */
+function formatRemainingStacks(remaining){
+  if (remaining <= 0){
+    return '<span class="sr-out">0 疊</span>';
+  }
+  const fullStacks = Math.floor(remaining / TICKETS_PER_STACK);
+  const loose = remaining % TICKETS_PER_STACK;
+  if (loose === 0){
+    return `<span class="sr-main">${fullStacks} 疊</span>`;
+  }
+  return `<span class="sr-main">${fullStacks}</span> + <span class="sr-loose">(${loose} 張)</span>`;
+}
+
+/* 推薦顏色：排除本場已用與剩餘 0，優先剩餘最少，同票數依固定色序 */
+function getRecommendedColor(){
+  const candidates = COLOR_LIST.filter(c =>
+    state.colors[c.name].remaining > 0 && !state.usedThisSession.includes(c.name)
+  );
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => {
+    const ra = state.colors[a.name].remaining;
+    const rb = state.colors[b.name].remaining;
+    if (ra !== rb) return ra - rb;
+    return COLOR_LIST.indexOf(a) - COLOR_LIST.indexOf(b);
+  });
+  return candidates[0].name;
+}
+
+/* 套用顏色（切換時自動結算舊顏色本疊剩餘）
+   ★ 只要舊顏色「本疊還有剩票（含整疊未用）」，切走時視為整疊用完並扣除 */
+function applyColor(ch, colorName){
+  const channelLabel = ch === 'cash' ? '現金通道' : '電子支付通道';
+  const oldColor = state.channels[ch].currentColor;
+
+  if (oldColor && oldColor !== colorName){
+    const stackRemain = getCurrentStackRemaining(oldColor);
+    if (stackRemain > 0){
+      const oldRemaining = state.colors[oldColor].remaining;
+      const newRemaining = Math.max(0, oldRemaining - stackRemain);
+      state.colors[oldColor].remaining = newRemaining;
+      addLog(`${channelLabel} 切換顏色：自動結算「${oldColor}」本疊剩 ${stackRemain} 張（全域剩餘 ${oldRemaining} → ${newRemaining}）`);
+    }
+  }
+
+  state.channels[ch].currentColor = colorName;
+  if (!state.usedThisSession.includes(colorName)) state.usedThisSession.push(colorName);
+  addLog(`${channelLabel} 切換目前顏色為「${colorName}」`);
+  persist();
+  renderAll();
+}
+
+async function selectColor(ch, colorName, skipConfirm = false){
+  const cur = state.channels[ch].currentColor;
+  if (colorName === cur) { toast('此顏色已是目前使用顏色'); return; }
+  const other = ch === 'cash' ? 'epay' : 'cash';
+  const otherLabel = other === 'cash' ? '現金通道' : '電子支付通道';
+  const thisLabel  = ch === 'cash' ? '現金通道' : '電子支付通道';
+
+  if (state.colors[colorName].remaining <= 0){
+    await askConfirm('無法選用', `<p>「<b>${esc(colorName)}</b>」票數已用完，無法選用。</p>`, '知道了', true);
+    return;
+  }
+  if (state.usedThisSession.includes(colorName)){
+    const byOther = state.channels[other].currentColor === colorName;
+    const msg = byOther
+      ? `<p>「<b>${esc(colorName)}</b>」本場已由 <b>${otherLabel}</b> 使用。</p>
+         <p class="warn-text">同一場次內，兩通道合計不可重複使用同一顏色。</p>`
+      : `<p>「<b>${esc(colorName)}</b>」本場已經出現過。</p>
+         <p class="warn-text">同一場次內，每種顏色只能出現一次。</p>`;
+    await askConfirm('顏色衝突', msg, '知道了', true);
+    return;
+  }
+  if (!skipConfirm){
+    const c = COLOR_MAP[colorName];
+    const oldStack = cur ? getCurrentStackRemaining(cur) : 0;
+    const oldRemainInfo = cur ? state.colors[cur] : null;
+    let oldDesc = '';
+    if (cur && oldStack > 0 && oldRemainInfo){
+      const afterRemain = Math.max(0, oldRemainInfo.remaining - oldStack);
+      oldDesc = `<p class="hint">
+        切換後，「<b>${esc(cur)}</b>」本疊剩 <b>${oldStack}</b> 張會自動視為用完並扣除：
+        全域剩餘 ${oldRemainInfo.remaining} → <b>${afterRemain}</b> 張
+        （剩餘疊數變為 ${formatRemainingStacks(afterRemain).replace(/<[^>]+>/g,'')}）
+      </p>`;
+    }
+    const ok = await askConfirm('切換目前顏色',
+      `<p>將 <b>${thisLabel}</b> 的目前顏色設為：</p>
+       <div class="modal-swatch" style="background:${c.hex};color:${c.text}">${esc(colorName)}</div>
+       <p>此顏色目前全域剩餘 <b>${state.colors[colorName].remaining}</b> 張，選用後將標記為「本場已使用」。</p>
+       ${oldDesc}`,
+      '確定切換');
+    if (!ok) return;
+  }
+  applyColor(ch, colorName);
+}
+
+async function recommend(ch){
+  const pick = getRecommendedColor();
+  if (!pick){
+    await askConfirm('沒有可推薦的顏色',
+      `<p>本場所有顏色都已使用，或所有顏色的票數都已用完。</p>
+       <p class="hint">建議到「設定頁」按「前往下一場」開始新場次。</p>`,
+      '知道了', true);
+    return;
+  }
+  const c = COLOR_MAP[pick];
+  const remain = state.colors[pick].remaining;
+  const ok = await askConfirm('自動推薦下一款顏色',
+    `<p>推薦邏輯：排除本場已用與已用完的顏色，優先選擇<b>剩餘票數最少</b>者（先清庫存）。</p>
+     <div class="modal-swatch" style="background:${c.hex};color:${c.text}">${esc(pick)}</div>
+     <p>此顏色目前全域剩餘 <b>${remain}</b> 張（${formatRemainingStacks(remain)}）。</p>
+     <p>是否採用此顏色？</p>`,
+    '採用此顏色');
+  if (!ok) return;
+  await selectColor(ch, pick, true);
+}
+
+async function submitRemain(ch){
+  const sec = $('#page-' + ch);
+  const input = $('.channel-remain-input', sec);
+  const cur = state.channels[ch].currentColor;
+  const channelLabel = ch === 'cash' ? '現金通道' : '電子支付通道';
+  if (!cur){
+    await askConfirm('尚未選擇顏色', '<p>請先選擇目前使用的顏色，再登記本疊剩餘票數。</p>', '知道了', true);
+    return;
+  }
+  const raw = input.value.trim();
+  if (raw === '' || !Number.isFinite(Number(raw))){
+    await askConfirm('輸入錯誤', '<p>請輸入有效的數字（0 ～ 60）。</p>', '知道了', true);
+    return;
+  }
+  let val = Math.floor(Number(raw));
+  if (val < 0) val = 0;
+  if (val > TICKETS_PER_STACK) val = TICKETS_PER_STACK;
+
+  const info = state.colors[cur];
+  const oldStackRemain = getCurrentStackRemaining(cur);
+  if (val === oldStackRemain){ toast('沒有變更'); return; }
+
+  const newRemain = calcGlobalRemainingFromStack(cur, val);
+
+  const ok = await askConfirm('確認登記本疊剩餘票數',
+    `<p>顏色：<b>${esc(cur)}</b>（共 ${info.stacks} 疊）</p>
+     <p>本疊剩餘：<b>${oldStackRemain}</b> → <b>${val}</b> 張</p>
+     <p>該顏色全域剩餘：${info.remaining} → <b>${newRemain}</b> 張（${formatRemainingStacks(newRemain)}）</p>
+     ${newRemain === 0 ? '<p class="warn-text">全域剩餘歸零，該顏色將標記為「已用完」。</p>' : ''}
+     <p class="hint">此操作會即時同步到所有頁面。</p>`,
+    '確定登記');
+  if (!ok){ renderChannel(ch); return; }
+
+  info.remaining = newRemain;
+  addLog(`${channelLabel} 登記「${cur}」本疊剩餘 ${val} 張（全域剩餘 ${newRemain}）`);
+  persist();
+  renderAll();
+}
+
+/* ================================================================
+   5. 渲染：設定頁
+   ================================================================ */
+function renderAdmin(){
+  const noInput = $('#sessionNoInput');
+  const nmInput = $('#sessionNameInput');
+  if (document.activeElement !== noInput) noInput.value = state.sessionNo;
+  if (document.activeElement !== nmInput) nmInput.value = state.sessionName || '';
+
+  const tbody = $('#adminTable tbody');
+  const activeInTable = document.activeElement && document.activeElement.closest && document.activeElement.closest('#adminTable');
+  if (!activeInTable){
+    tbody.innerHTML = COLOR_LIST.map(c => {
+      const info = state.colors[c.name];
+      const used = state.usedThisSession.includes(c.name);
+      const empty = info.remaining <= 0;
+      let statusHTML = used
+        ? '<span class="tag used">✔ 本場已用</span>'
+        : (empty ? '<span class="tag-out">已用完</span>' : '<span class="tag">未使用</span>');
+      if (!empty && info.remaining <= 10 && !used){
+        statusHTML += ' <span class="tag-warn">快用完</span>';
+      }
+      return `<tr data-color="${esc(c.name)}" class="${used ? 'used-row' : ''}">
+        <td><span class="swatch" style="background:${c.hex}"></span>${esc(c.name)}</td>
+        <td><input type="number" class="stacks-input" min="0" step="1" value="${info.stacks}"></td>
+        <td class="total-cell">${info.total}</td>
+        <td><input type="number" class="remain-input" min="0" step="1" value="${info.remaining}"></td>
+        <td class="stack-remain-cell">${formatRemainingStacks(info.remaining)}</td>
+        <td class="status-cell">${statusHTML}</td>
+        <td><button class="btn small primary apply-row">套用</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const logList = $('#logList');
+  if (!state.logs.length){
+    logList.innerHTML = '<li class="empty">尚無操作紀錄</li>';
+  } else {
+    logList.innerHTML = state.logs.slice(0, 20).map(l => `
+      <li>
+        <span class="log-time">${fmtTime(l.time)}</span>
+        <span class="log-who">${esc(l.who)}</span>
+        <span class="log-act">${esc(l.action)}</span>
+      </li>`).join('');
+  }
+}
+
+async function applyRowChanges(colorName){
+  const tr = $(`#adminTable tr[data-color="${colorName}"]`);
+  if (!tr) return;
+  const stacksInput = $('.stacks-input', tr);
+  const remainInput = $('.remain-input', tr);
+  const info = state.colors[colorName];
+
+  const newStacks = Math.max(0, Math.floor(Number(stacksInput.value) || 0));
+  const newRemain = Math.max(0, Math.floor(Number(remainInput.value) || 0));
+
+  if (newStacks === info.stacks && newRemain === info.remaining){
+    toast('沒有變更');
+    return;
+  }
+
+  if (newStacks !== info.stacks){
+    const newTotal = newStacks * TICKETS_PER_STACK;
+    const delta = (newStacks - info.stacks) * TICKETS_PER_STACK;
+    let calcRemain = info.remaining + delta;
+    calcRemain = Math.max(0, Math.min(newTotal, calcRemain));
+
+    const ok = await askConfirm('確認變更疊數',
+      `<p>「<b>${esc(colorName)}</b>」的疊數將由 <b>${info.stacks}</b> 改為 <b>${newStacks}</b>。</p>
+       <p>總票數：${info.total} → <b>${newTotal}</b>（每疊 ${TICKETS_PER_STACK} 張）</p>
+       <p>剩餘票數：${info.remaining} → <b>${calcRemain}</b>（依增減疊數自動重算）</p>
+       <p class="hint">此操作會立即同步到所有頁面。</p>`,
+      '確定套用');
+    if (!ok){ renderAdmin(); return; }
+
+    info.stacks = newStacks;
+    info.total = newTotal;
+    info.remaining = calcRemain;
+    addLog(`調整「${colorName}」疊數為 ${newStacks}（總票數 ${newTotal}、剩餘 ${calcRemain}）`);
+    persist();
+    renderAll();
+    return;
+  }
+
+  if (newRemain !== info.remaining){
+    const ok = await askConfirm('確認覆寫剩餘票數',
+      `<p>「<b>${esc(colorName)}</b>」的剩餘票數將由 <b>${info.remaining}</b> 覆寫為 <b>${newRemain}</b>。</p>
+       <p class="hint">此為手動修正，請確認無誤。</p>`,
+      '確定覆寫');
+    if (!ok){ renderAdmin(); return; }
+
+    info.remaining = newRemain;
+    addLog(`手動修正「${colorName}」剩餘票數為 ${newRemain}`);
+    persist();
+    renderAll();
+  }
+}
+
+/* ================================================================
+   6. 渲染：通道頁
+   ================================================================ */
+function channelInnerHTML(title, icon){
+  return `
+  <div class="channel-wrap">
+
+    <div class="card span-full current-card">
+      <h2>${icon} ${title} · 目前使用顏色</h2>
+      <div class="current-color-box empty">尚未選擇</div>
+      <div class="current-meta">
+        <span>本疊剩餘：<b class="current-stack-remain">—</b> 張</span>
+        <span>本顏色全域剩餘：<b class="current-remain">—</b> 張</span>
+        <span>本場已出現顏色：<b class="qi-used-count">0 / 9</b></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🎛️ 操作</h2>
+      <button class="btn primary full recommend-btn">🎲 自動推薦下一款顏色</button>
+
+      <div class="field">
+        <label>手動選擇顏色（僅列出本場未使用且仍有票的顏色）</label>
+        <div class="color-picker"></div>
+      </div>
+
+      <div class="field">
+        <label>登記本疊剩餘票數（0 ～ 60 張）</label>
+        <div class="row">
+          <input type="number" class="channel-remain-input" min="0" max="60" step="1" placeholder="本疊剩餘票數">
+          <button class="btn primary submit-remain">送出（Enter）</button>
+        </div>
+        <p class="hint">
+          <b>本輪顏色還在使用中</b>時，才需要在此登記本疊剩餘票數（用於盤點修正）。<br>
+          <b>要切換到下一款顏色</b>時不必輸入，系統會自動把本疊剩餘（含整疊未用）視為用完並扣除。
+        </p>
+      </div>
+
+      <p class="hint">快捷鍵：<kbd>R</kbd> 觸發推薦顏色、在剩餘票數欄位按 <kbd>Enter</kbd> 送出。</p>
+    </div>
+
+    <div class="card">
+      <h2>✅ 本場已出現顏色</h2>
+      <div class="used-chips"></div>
+      <p class="hint">同一場次內每種顏色只能出現一次（現金通道與電子支付通道合計）。</p>
+    </div>
+
+  </div>`;
+}
+
+function renderChannel(ch){
+  const sec = $('#page-' + ch);
+  if (!sec) return;
+  const cur = state.channels[ch].currentColor;
+  const info = cur ? state.colors[cur] : null;
+
+  const box = $('.current-color-box', sec);
+  if (cur){
+    const c = COLOR_MAP[cur];
+    box.style.background = c.hex;
+    box.style.color = c.text;
+    box.style.borderColor = 'transparent';
+    box.textContent = cur;
+    box.classList.remove('empty');
+  } else {
+    box.style.background = '';
+    box.style.color = '';
+    box.style.borderColor = '';
+    box.textContent = '尚未選擇';
+    box.classList.add('empty');
+  }
+
+  $('.current-stack-remain', sec).textContent = info ? getCurrentStackRemaining(cur) : '—';
+  $('.current-remain', sec).textContent = info ? info.remaining : '—';
+  $('.qi-used-count', sec).textContent = `${state.usedThisSession.length} / 9`;
+
+  const picker = $('.color-picker', sec);
+  picker.innerHTML = COLOR_LIST.map(c => {
+    const ci = state.colors[c.name];
+    const isCurrent = c.name === cur;
+    const usedByOther = state.usedThisSession.includes(c.name) && !isCurrent;
+    const isEmpty = ci.remaining <= 0;
+    const disabled = usedByOther || isEmpty;
+
+    let tag;
+    if (isEmpty) tag = '已用完';
+    else if (usedByOther) tag = '本場已用';
+    else if (ci.remaining <= 10) tag = `剩 ${ci.remaining}（快用完）`;
+    else tag = `剩 ${ci.remaining}`;
+
+    return `<button class="color-pick ${isCurrent ? 'active' : ''}"
+              data-color="${esc(c.name)}"
+              ${disabled ? 'disabled' : ''}>
+              <span class="dot" style="background:${c.hex}"></span>
+              <span>${esc(c.name)}</span>
+              <span class="cp-tag">${tag}</span>
+            </button>`;
+  }).join('');
+
+  const remInput = $('.channel-remain-input', sec);
+  if (document.activeElement !== remInput){
+    remInput.value = info ? getCurrentStackRemaining(cur) : '';
+  }
+
+  const usedGrid = $('.used-chips', sec);
+  usedGrid.innerHTML = COLOR_LIST.map(c => {
+    const on = state.usedThisSession.includes(c.name);
+    return `<span class="used-chip ${on ? 'on' : ''}"
+              ${on ? `style="background:${c.hex};color:${c.text}"` : ''}>
+              <span class="dot" style="background:${on ? c.hex : '#ccd4e2'}"></span>
+              ${esc(c.name)}${on ? ' ✓' : ''}
+            </span>`;
+  }).join('');
+}
+
+/* ================================================================
+   7. 渲染：顯示看板
+   ================================================================ */
+function renderBoard(){
+  const nameSuffix = state.sessionName ? `　${state.sessionName}` : '';
+  $('#boardSession').textContent = `第 ${state.sessionNo} 場${nameSuffix}`;
+
+  ['cash','epay'].forEach(ch => {
+    const box = $(`#page-board .board-channel[data-ch="${ch}"] .board-color-box`);
+    const cur = state.channels[ch].currentColor;
+    if (cur){
+      const c = COLOR_MAP[cur];
+      box.style.background = c.hex;
+      box.style.color = c.text;
+      box.textContent = cur;
+      box.classList.remove('empty');
+    } else {
+      box.style.background = '';
+      box.style.color = '';
+      box.textContent = '尚未選擇';
+      box.classList.add('empty');
+    }
+  });
+
+  $('#boardUsedGrid').innerHTML = COLOR_LIST.map(c => {
+    const on = state.usedThisSession.includes(c.name);
+    return `<div class="board-used-cell ${on ? 'on' : ''}"
+              ${on ? `style="background:${c.hex};color:${c.text}"` : ''}>
+              <span>${on ? '✔' : ''}</span>
+              <span>${esc(c.name)}</span>
+            </div>`;
+  }).join('');
+
+  $('#boardRemainGrid').innerHTML = COLOR_LIST.map(c => {
+    const r = state.colors[c.name].remaining;
+    const out = r <= 0;
+    const low = !out && r <= 10;
+    return `<div class="board-remain-cell ${out ? 'out' : ''} ${low ? 'low' : ''}">
+              <span class="brc-dot" style="background:${c.hex}"></span>
+              <span class="brc-name">${esc(c.name)}</span>
+              <span class="brc-num">${out ? '已用完' : r}</span>
+            </div>`;
+  }).join('');
+
+  const rec = getRecommendedColor();
+  const el = $('#boardSuggest');
+  if (rec){
+    const c = COLOR_MAP[rec];
+    el.innerHTML = `建議下一款：<span class="suggest-chip" style="background:${c.hex};color:${c.text}">${esc(rec)}</span>`;
+  } else {
+    el.innerHTML = '建議下一款：<b>無可用顏色</b>';
+  }
+}
+
+/* ================================================================
+   8. 總渲染
+   ================================================================ */
+function renderAll(){
+  renderAdmin();
+  renderChannel('cash');
+  renderChannel('epay');
+  renderBoard();
+}
+
+/* ================================================================
+   9. 事件綁定
+   ================================================================ */
+
+/* 分頁切換 */
+$$('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    $$('.page').forEach(p => p.classList.remove('active'));
+    const target = $('#page-' + btn.dataset.tab);
+    if (target) target.classList.add('active');
+    document.body.classList.toggle('board-mode', btn.dataset.tab === 'board');
+  });
+});
+
+/* 操作者名稱 */
+const opInput = $('#operatorInput');
+opInput.value = operator;
+opInput.addEventListener('input', () => {
+  operator = opInput.value.trim() || '未命名';
+  sessionStorage.setItem('bingoOperator', operator);
+});
+
+/* 場次設定 */
+$('#saveSessionBtn').addEventListener('click', () => {
+  const no = Math.max(1, Math.floor(Number($('#sessionNoInput').value) || 1));
+  const nm = $('#sessionNameInput').value.trim();
+  if (no === state.sessionNo && nm === (state.sessionName || '')){ toast('沒有變更'); return; }
+  state.sessionNo = no;
+  state.sessionName = nm;
+  addLog(`設定場次為第 ${no} 場${nm ? '（' + nm + '）' : ''}`);
+  persist();
+  renderAll();
+});
+
+/* 表格套用 */
+$('#adminTable').addEventListener('click', (e) => {
+  const btn = e.target.closest('.apply-row');
+  if (!btn) return;
+  const tr = btn.closest('tr');
+  if (!tr) return;
+  applyRowChanges(tr.dataset.color);
+});
+
+/* 前往下一場：保留兩通道目前顏色作為新場次第一款顏色 */
+$('#nextSessionBtn').addEventListener('click', async () => {
+  const cashColor = state.channels.cash.currentColor;
+  const epayColor = state.channels.epay.currentColor;
+  const cashRem = cashColor ? state.colors[cashColor].remaining : 0;
+  const epayRem = epayColor ? state.colors[epayColor].remaining : 0;
+
+  const usedList = state.usedThisSession.length ? state.usedThisSession.join('、') : '（無）';
+
+  const keepDesc = [];
+  if (cashColor && cashRem > 0){
+    const stackRem = getCurrentStackRemaining(cashColor);
+    keepDesc.push(`現金通道保留「${cashColor}」（本疊剩 ${stackRem} 張、全域剩餘 ${cashRem} 張）`);
+  }
+  if (epayColor && epayRem > 0 && epayColor !== cashColor){
+    const stackRem = getCurrentStackRemaining(epayColor);
+    keepDesc.push(`電子支付通道保留「${epayColor}」（本疊剩 ${stackRem} 張、全域剩餘 ${epayRem} 張）`);
+  }
+
+  const ok = await askConfirm('前往下一場',
+    `<p>即將結束「<b>第 ${state.sessionNo} 場${state.sessionName ? '（' + esc(state.sessionName) + '）' : ''}</b>」。</p>
+     <ul>
+       <li>本場已用顏色：${esc(usedList)}</li>
+       <li>場次編號將變為 <b>${state.sessionNo + 1}</b></li>
+       <li>本場使用紀錄會寫入歷史紀錄</li>
+       <li>未用完的顏色<b>保留剩餘票數</b>繼續使用</li>
+       <li>已用完（剩餘 0）的顏色維持不可選用</li>
+       ${keepDesc.length
+         ? `<li>通道顏色自動沿用為新場次第一款顏色，不需重新選擇：<br>${keepDesc.map(s => '・' + s).join('<br>')}</li>`
+         : '<li>兩通道目前沒有可沿用的顏色（未選擇或已用完），新場次請重新選擇。</li>'}
+     </ul>`,
+    '確定前往下一場');
+  if (!ok) return;
+
+  state.history.push({
+    session: state.sessionNo,
+    sessionName: state.sessionName || '',
+    used: [...state.usedThisSession],
+    timestamp: Date.now()
+  });
+  if (state.history.length > 200) state.history = state.history.slice(-200);
+
+  state.sessionNo += 1;
+  state.sessionName = '';
+  state.usedThisSession = [];
+
+  /* 保留通道顏色：若該顏色仍有剩餘票數，則自動繼續作為新場次第一款顏色 */
+  if (cashColor && state.colors[cashColor] && state.colors[cashColor].remaining > 0){
+    state.channels.cash.currentColor = cashColor;
+    state.usedThisSession.push(cashColor);
+  } else {
+    state.channels.cash.currentColor = null;
+  }
+  if (epayColor && state.colors[epayColor] && state.colors[epayColor].remaining > 0 && epayColor !== cashColor){
+    state.channels.epay.currentColor = epayColor;
+    if (!state.usedThisSession.includes(epayColor)) state.usedThisSession.push(epayColor);
+  } else {
+    state.channels.epay.currentColor = null;
+  }
+
+  const keptLog = [];
+  if (state.channels.cash.currentColor) keptLog.push(`現金:${state.channels.cash.currentColor}`);
+  if (state.channels.epay.currentColor) keptLog.push(`電子:${state.channels.epay.currentColor}`);
+  addLog(`前往下一場 → 第 ${state.sessionNo} 場${keptLog.length ? '（自動沿用通道顏色：' + keptLog.join('、') + '）' : ''}`);
+  persist();
+  renderAll();
+  toast('已進入第 ' + state.sessionNo + ' 場');
+});
+
+/* 重置整個系統（需密碼） */
+$('#resetBtn').addEventListener('click', async () => {
+  const pw = await askPassword('重置整個系統',
+    '請輸入管理員密碼以確認重置：',
+    '確定重置');
+  if (pw === null) return;
+  if (pw !== RESET_PASSWORD){ toast('密碼錯誤，已取消重置'); return; }
+
+  state = defaultState();
+  addLog('重置整個系統（恢復初始狀態）');
+  persist();
+  renderAll();
+  toast('系統已重置');
+});
+
+/* 匯出 JSON */
+$('#exportBtn').addEventListener('click', () => {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bingo-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  addLog('匯出 JSON 備份');
+  persist();
+  renderAll();
+  toast('已下載備份檔');
+});
+
+/* 匯入 JSON */
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch (err) {
+      await askConfirm('匯入失敗', `<p>檔案格式錯誤，無法解析 JSON。</p><p class="hint">${esc(err.message)}</p>`, '知道了', true);
+      e.target.value = '';
+      return;
+    }
+    const ok = await askConfirm('匯入資料',
+      `<p>確定要用此檔案的內容<b>覆蓋目前所有資料</b>嗎？</p>
+       <p class="hint">檔名：${esc(file.name)}</p>
+       <p class="hint">覆蓋後所有分頁都會同步更新。</p>`,
+      '確定匯入');
+    if (!ok){ e.target.value = ''; return; }
+
+    state = normalizeState(parsed);
+    addLog(`匯入 JSON 資料（${file.name}）`);
+    persist();
+    renderAll();
+    toast('匯入完成');
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+/* 通道頁事件委派 */
+['cash','epay'].forEach(ch => {
+  const sec = $('#page-' + ch);
+  if (!sec) return;
+
+  sec.addEventListener('click', (e) => {
+    if (e.target.closest('.recommend-btn')){ recommend(ch); return; }
+    const pick = e.target.closest('.color-pick');
+    if (pick && !pick.disabled){ selectColor(ch, pick.dataset.color); return; }
+    if (e.target.closest('.submit-remain')){ submitRemain(ch); return; }
+  });
+
+  sec.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('channel-remain-input')){
+      e.preventDefault();
+      submitRemain(ch);
+    }
+  });
+});
+
+/* 快捷鍵 R 觸發推薦 */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'r' && e.key !== 'R') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const activePage = $('.page.active');
+  if (!activePage || !activePage.classList.contains('channel-page')) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'TEXTAREA' ||
+      (ae.tagName === 'INPUT' && (ae.type === 'text' || ae.type === 'password' || ae.type === 'number')))) return;
+  e.preventDefault();
+  recommend(activePage.dataset.channel);
+});
+
+/* 看板時鐘 */
+function tickClock(){
+  const el = $('#boardClock');
+  if (!el) return;
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const wd = ['日','一','二','三','四','五','六'][d.getDay()];
+  el.textContent = `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} 星期${wd} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+/* 看板全螢幕 */
+$('#boardFsBtn').addEventListener('click', () => {
+  const el = $('#page-board');
+  if (!document.fullscreenElement){
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+});
+
+/* ================================================================
+   10. 初始化
+   ================================================================ */
+(function init(){
+  $('#page-cash').innerHTML = channelInnerHTML('現金通道', '🟢');
+  $('#page-epay').innerHTML = channelInnerHTML('電子支付通道', '🔵');
+
+  if (!localStorage.getItem(STORAGE_KEY)){
+    persist();
+  }
+  renderAll();
+})();
+</script>
+
+<!--
+====================================================================
+ README：使用說明
+====================================================================
+
+【各頁面用途】
+ 1. 設定頁        —— 設定場次、每色疊數、手動修正剩餘票數、換場、重置、備份／還原、查看操作紀錄。
+ 2. 現金通道頁    —— 選擇／推薦現金通道目前使用的顏色、登記該顏色「本疊」剩餘票數。
+ 3. 電子支付通道頁 —— 同上，但為電子支付通道（與現金通道顏色不可重複）。
+ 4. 顯示看板頁    —— 給現場大螢幕觀看：場次、時間、兩通道目前顏色、本場已出現顏色、各色剩餘票數、建議下一款。
+
+【開場前設定流程】
+ 1) 開啟「設定頁」，設定場次編號與名稱後按「儲存場次」。
+ 2) 在「顏色狀態總表」調整每種顏色的疊數（每疊 60 張），按「套用」並確認。
+ 3) 確認各色剩餘票數正確（必要時手動覆寫）。
+ 4) 切換到「顯示看板」頁，按右上角「⛶ 全螢幕」放大顯示。
+
+【顏色狀態總表的「剩餘疊數」顯示規則】
+ - 有整疊 + 散票：顯示「X + (Y 張)」→ 例如 2 + (40 張)
+ - 純整疊：顯示「X 疊」
+ - 已用完：顯示「0 疊」（紅字）
+ · 例：粉紅色 1 疊、用了 20 張 → 剩餘 40 張 → 剩餘疊數「0 + (40 張)」
+ · 例：深藍色 1 疊、用了 60 張 → 剩餘 0 張 → 剩餘疊數「0 疊」，本場狀態「已用完 / 本場已用」
+
+【通道頁登記剩餘票數（重要）】
+ - 本輪顏色「還在使用中」時，才需要手動登記本疊剩餘票數（0～60），用於盤點修正。
+ - 要「切換到下一款顏色」時不必輸入，系統會自動把本疊剩餘（含整疊未用）視為用完並扣除：
+   · 例：深藍色 1 疊 60 張未輸入 → 切換到粉紅色時，系統自動扣 60 張 → 深藍剩 0（0 疊）
+   · 例：粉紅色 1 疊已用 20 張（剩 40 張）→ 切換到黃色時，系統自動扣 40 張 → 粉色剩 0（0 疊）
+
+【換場操作流程】
+ 1) 在「設定頁」按「➡️ 前往下一場」。
+ 2) 於二次確認視窗確認後，系統自動：
+    · 場次 +1、本場已用紀錄清空並寫入歷史
+    · 未用完顏色保留剩餘票數
+    · 已用完（剩餘 0）顏色維持不可選用
+    · 兩通道目前顏色自動沿用為新場次第一款顏色（只要該顏色仍有剩餘票數）
+    · 沿用的顏色會自動列入新場次的「已出現顏色」
+ 3) 兩通道頁直接顯示沿用的顏色與剩餘票數，可立即繼續售票。
+
+【重置系統】
+ - 在「設定頁」按「🗑️ 重置整個系統」。
+ - 於彈窗輸入管理員密碼：123456。
+ - 密碼正確才會執行重置，並恢復為初始狀態（9 色各 1 疊、每色 60 張、第 1 場）。
+
+【備份與還原方式】
+ - 備份：設定頁 →「⬇️ 匯出 JSON 備份」→ 會下載 bingo-backup-YYYYMMDD-HHmm.json。
+ - 還原：設定頁 →「⬆️ 匯入 JSON 還原」→ 選擇備份檔 → 確認覆蓋。
+
+【注意事項】
+ - 同一場次內，同一顏色只能出現一次（現金與電子支付合計）。
+ - 換場後，兩通道沿用的顏色已自動標記為本場已用，其他顏色仍可正常選用。
+ - 所有破壞性操作（變更疊數、覆寫剩餘票數、換場、重置、匯入）皆有二次確認（重置以密碼確認）。
+ - 資料存於 localStorage，並以 BroadcastChannel（fallback: storage 事件）即時同步多分頁。
+ - 快捷鍵：通道頁按 R 觸發推薦顏色；在剩餘票數欄位按 Enter 送出。
+====================================================================
+-->
+</body>
+</html>
