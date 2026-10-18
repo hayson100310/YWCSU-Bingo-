@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>YWCSU Bingo 票務管理系統</title>
 <link rel="icon" href="logo.png" type="image/x-icon">
-<!-- 跨設備即時同步用：MQTT over WebSocket -->
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <style>
 /* ============================================================
@@ -23,6 +22,73 @@ button{font-family:inherit;cursor:pointer}
 input{font-family:inherit;font-size:16px}
 .muted{color:#8a93a6}
 .sub{font-size:12px;color:#8a93a6;font-weight:400}
+
+/* ============================================================
+   登入畫面
+   ============================================================ */
+.login-screen{
+  position:fixed;inset:0;z-index:200;
+  background:linear-gradient(135deg,#1B3A6B 0%,#28508f 60%,#1B3A6B 100%);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+  animation:loginFadeIn .3s ease;
+}
+.login-screen[hidden]{display:none}
+@keyframes loginFadeIn{from{opacity:0}to{opacity:1}}
+.login-card{
+  background:#fff;border-radius:20px;padding:32px 26px 26px;
+  width:100%;max-width:440px;
+  box-shadow:0 24px 70px rgba(0,0,0,.4);
+  animation:loginPop .3s ease;
+}
+@keyframes loginPop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+.login-logo{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin-bottom:20px;
+}
+.login-logo img{
+  width:38px;height:38px;object-fit:contain;
+  border-radius:10px;padding:2px;background:#fff;
+}
+.login-card h2{
+  font-size:20px;font-weight:800;color:#1B3A6B;
+  text-align:center;margin-bottom:6px;letter-spacing:.3px;
+}
+.login-sub{
+  text-align:center;color:#6b7488;font-size:13.5px;
+  margin-bottom:22px;line-height:1.6;
+}
+.login-sub b{color:#1B3A6B}
+.login-card input{
+  width:100%;border:2px solid #d8dfeb;border-radius:12px;
+  padding:13px 16px;font-size:17px;background:#f8fafc;
+  outline:none;transition:.15s;text-align:center;font-weight:700;
+  color:#1c2333;
+}
+.login-card input::placeholder{font-weight:500;color:#b6bdcb}
+.login-card input:focus{
+  border-color:#1B3A6B;background:#fff;
+  box-shadow:0 0 0 4px rgba(27,58,107,.1);
+}
+.login-card > button{
+  width:100%;margin-top:14px;padding:13px;
+  background:#1B3A6B;color:#fff;border:none;border-radius:12px;
+  font-size:15px;font-weight:700;cursor:pointer;transition:.15s;
+  letter-spacing:2px;
+}
+.login-card > button:hover{background:#24478a}
+.login-card > button:active{transform:scale(.98)}
+.login-error{
+  color:#E63946;font-size:13px;margin-top:10px;
+  text-align:center;font-weight:600;
+  animation:shake .3s ease;
+}
+.login-error[hidden]{display:none}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-6px)}
+  75%{transform:translateX(6px)}
+}
 
 /* ============================================================
    頂部導覽列
@@ -44,8 +110,16 @@ input{font-family:inherit;font-size:16px}
 }
 .operator input::placeholder{color:rgba(255,255,255,.5)}
 .operator input:focus{border-color:#7EC8E3;background:rgba(255,255,255,.2)}
+.logout-btn{
+  background:rgba(255,255,255,.12);
+  color:#dbe6f7;border:1px solid rgba(255,255,255,.3);
+  border-radius:999px;padding:4px 10px;font-size:11px;
+  font-weight:600;cursor:pointer;transition:.15s;
+  white-space:nowrap;
+}
+.logout-btn:hover{background:rgba(255,255,255,.25);color:#fff;border-color:rgba(255,255,255,.5)}
 
-/* 連線狀態徽章（可點擊管理） */
+/* 連線狀態徽章 */
 .sync-badge{
   display:inline-flex;align-items:center;gap:8px;
   font-size:11px;background:rgba(255,255,255,.15);
@@ -358,6 +432,8 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
   .board-channels{grid-template-columns:1fr}
   .board{min-height:auto;padding:12px}
   .current-color-box{font-size:clamp(28px,8vw,48px);min-height:120px}
+  .login-card{padding:26px 20px 22px}
+  .login-card h2{font-size:18px}
 }
 @media (min-width:1024px){
   .board-color-box{min-height:24vh}
@@ -366,6 +442,22 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 </style>
 </head>
 <body>
+
+<!-- ============================================================
+     登入畫面
+     ============================================================ -->
+<div id="loginScreen" class="login-screen" hidden>
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="logo.png" alt="YWCSU">
+      <h2 style="margin-bottom:0">YWCSU Bingo</h2>
+    </div>
+    <p class="login-sub">請輸入你的名字以進入<b>票務系統</b></p>
+    <input id="loginNameInput" type="text" placeholder="輸入名字" autocomplete="off" maxlength="20" spellcheck="false">
+    <button id="loginBtn">登 入</button>
+    <p id="loginError" class="login-error" hidden></p>
+  </div>
+</div>
 
 <!-- ============================================================
      頂部導覽
@@ -377,6 +469,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
     <div class="operator">
       <label for="operatorInput">操作者</label>
       <input id="operatorInput" type="text" maxlength="12" placeholder="暱稱">
+      <button id="logoutBtn" class="logout-btn" title="登出並切換使用者">登出</button>
     </div>
     <span class="sync-badge connecting" id="syncBadge" title="點擊管理房間連線">
       <span class="sb-led"></span>
@@ -396,9 +489,8 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 
   <section id="page-admin" class="page active">
 
-    <!-- 房間連線管理 -->
     <div class="card">
-      <h2>房間連線<span class="h2-tag" id="roomCardStatus">檢查中…</span></h2>
+      <h2>📡 房間連線<span class="h2-tag" id="roomCardStatus">檢查中…</span></h2>
       <p class="hint" style="margin-top:0">
         房間碼用於讓多台裝置（手機、平板、電腦）即時同步同一份資料。所有要同步的裝置，請輸入<b>相同房間碼</b>。
       </p>
@@ -411,7 +503,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
         <button id="manageRoomBtn" class="btn primary">更改房間碼</button>
       </div>
       <p class="hint">
-        更換房間碼後，本裝置會切到新房間，其他裝置請一併更改。
+        ⚠️ 更換房間碼後，本裝置會切到新房間，其他裝置請一併更改。
       </p>
     </div>
 
@@ -534,6 +626,14 @@ const CHANNEL_NAME = 'bingoSystem';
 const TICKETS_PER_STACK = 60;
 const RESET_PASSWORD = '123456';
 
+/* 允許登入的組員名單 */
+const ALLOWED_MEMBERS = [
+  '陳子燁','劉嘉謙','張銘軒','Hayson',
+  '余承晞','陳樂軒','關卓軒','黃皓晴',
+  '林懷康','呂志立','葉情珍','羅楚衡'
+];
+const LOGIN_KEY = 'bingoLoginUser';
+
 /* 跨設備即時同步：公共 MQTT broker（免費、無需註冊） */
 const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 const ROOM_CODE_KEY = 'bingoRoomCode';
@@ -552,7 +652,6 @@ const COLOR_LIST = [
 ];
 const COLOR_MAP = Object.fromEntries(COLOR_LIST.map(c => [c.name, c]));
 
-/* 每個分頁一個唯一 clientId，用於區分自己與其他人的訊息 */
 const CLIENT_ID = 'bingo_' + Math.random().toString(36).slice(2, 10);
 
 function generateRoomCode(){
@@ -560,44 +659,36 @@ function generateRoomCode(){
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `YWCSU-${y}-${rand}`;
 }
-
 function sanitizeRoomCode(code){
   const cleaned = String(code || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9\-_]/g, '')
-    .slice(0, 40);
+    .trim().toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 40);
   return cleaned || generateRoomCode();
 }
 
 let roomCode = sanitizeRoomCode(localStorage.getItem(ROOM_CODE_KEY) || '');
 localStorage.setItem(ROOM_CODE_KEY, roomCode);
 
-/* 時間戳記：跨設備「後寫覆蓋先寫」用 */
 let lastLocalTs = 0;
 let lastRemoteTs = 0;
+
+/* 應用是否已經初始化（登入後才啟動，避免重複渲染與連線） */
+let appBootstrapped = false;
 
 function defaultState(){
   const colors = {};
   COLOR_LIST.forEach(c => { colors[c.name] = { stacks:1, total:TICKETS_PER_STACK, remaining:TICKETS_PER_STACK }; });
   return {
-    sessionNo: 1,
-    sessionName: '',
-    colors,
-    usedThisSession: [],
+    sessionNo: 1, sessionName: '', colors, usedThisSession: [],
     channels: { cash:{ currentColor:null }, epay:{ currentColor:null } },
-    history: [],
-    logs: []
+    history: [], logs: []
   };
 }
-
 function normalizeState(raw){
   const s = (raw && typeof raw === 'object') ? raw : {};
   const out = {
     sessionNo: Number.isFinite(s.sessionNo) && s.sessionNo > 0 ? Math.floor(s.sessionNo) : 1,
     sessionName: typeof s.sessionName === 'string' ? s.sessionName : '',
-    colors: {},
-    usedThisSession: [],
+    colors: {}, usedThisSession: [],
     channels: { cash:{ currentColor:null }, epay:{ currentColor:null } },
     history: Array.isArray(s.history) ? s.history : [],
     logs: Array.isArray(s.logs) ? s.logs.slice(0, 20) : []
@@ -626,7 +717,7 @@ function normalizeState(raw){
 }
 
 /* ================================================================
-   2. 狀態載入 & 持久化（含跨設備 MQTT 廣播）
+   2. 狀態載入 & 持久化
    ================================================================ */
 let bc = null;
 try { bc = new BroadcastChannel(CHANNEL_NAME); } catch (e) { bc = null; }
@@ -645,28 +736,13 @@ function readLocal(){
   }
 }
 
-/** 本地儲存 + 同機多分頁廣播 + 跨設備 MQTT 廣播 */
 function persist(opts){
   opts = opts || {};
   const now = Date.now();
-  lastLocalTs = Math.max(now, lastRemoteTs + 1); // 確保本地時間戳一定比已知遠端新
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error('寫入 localStorage 失敗', e);
-  }
-
-  // 同機多分頁
-  if (bc) {
-    try { bc.postMessage({ type:'sync', ts: lastLocalTs, clientId: CLIENT_ID }); } catch (e) {}
-  }
-
-  // 跨設備 MQTT（retained，讓新設備一連上就拿到最新狀態）
-  if (!opts.skipRemote) {
-    publishToMQTT();
-  }
-
+  lastLocalTs = Math.max(now, lastRemoteTs + 1);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  if (bc) { try { bc.postMessage({ type:'sync', ts: lastLocalTs, clientId: CLIENT_ID }); } catch (e) {} }
+  if (!opts.skipRemote) publishToMQTT();
   updateSyncBadge();
 }
 
@@ -674,68 +750,40 @@ function persist(opts){
    3. MQTT 跨設備即時同步
    ================================================================ */
 let mqttClient = null;
-let mqttStatus = 'offline'; // 'offline' | 'connecting' | 'online'
-let mqttGotInitial = false; // 是否已收到 retained 初始狀態
+let mqttStatus = 'offline';
+let mqttGotInitial = false;
 let mqttSubscribeFallbackTimer = null;
 
-function currentTopic(){
-  return `${MQTT_TOPIC_PREFIX}/${roomCode}`;
-}
+function currentTopic(){ return `${MQTT_TOPIC_PREFIX}/${roomCode}`; }
 
 function connectMQTT(){
-  // 若 mqtt.js 沒載入（例如離線、CDN 掛掉），退回同機同步
   if (typeof mqtt === 'undefined' || !mqtt || typeof mqtt.connect !== 'function'){
-    console.warn('[MQTT] mqtt.js 未載入，跨設備同步停用（僅同機多分頁可同步）');
-    mqttStatus = 'offline';
-    updateSyncBadge();
-    updateRoomCardStatus();
-    return;
+    console.warn('[MQTT] mqtt.js 未載入，跨設備同步停用');
+    mqttStatus = 'offline'; updateSyncBadge(); updateRoomCardStatus(); return;
   }
-
-  // 先斷開舊連線
-  if (mqttClient){
-    try { mqttClient.end(true); } catch (e) {}
-    mqttClient = null;
-  }
-  mqttStatus = 'connecting';
-  mqttGotInitial = false;
-  updateSyncBadge();
-  updateRoomCardStatus();
+  if (mqttClient){ try { mqttClient.end(true); } catch (e) {} mqttClient = null; }
+  mqttStatus = 'connecting'; mqttGotInitial = false;
+  updateSyncBadge(); updateRoomCardStatus();
 
   const topic = currentTopic();
-
   try {
     mqttClient = mqtt.connect(MQTT_BROKER_URL, {
-      clientId: CLIENT_ID,
-      clean: true,
-      connectTimeout: 8000,
-      reconnectPeriod: 3000,
-      keepalive: 30
+      clientId: CLIENT_ID, clean: true, connectTimeout: 8000,
+      reconnectPeriod: 3000, keepalive: 30
     });
   } catch (e) {
     console.error('[MQTT] 初始化失敗', e);
-    mqttStatus = 'offline';
-    updateSyncBadge();
-    updateRoomCardStatus();
-    return;
+    mqttStatus = 'offline'; updateSyncBadge(); updateRoomCardStatus(); return;
   }
 
   mqttClient.on('connect', () => {
     console.log('[MQTT] 已連線，訂閱 topic:', topic);
-    mqttStatus = 'online';
-    updateSyncBadge();
-    updateRoomCardStatus();
-
+    mqttStatus = 'online'; updateSyncBadge(); updateRoomCardStatus();
     mqttClient.subscribe(topic, { qos: 1 }, (err) => {
       if (err) { console.warn('[MQTT] 訂閱失敗', err); return; }
-      // 訂閱完成後，等 800ms 讓 retained message 到達；
-      // 若這 800ms 內沒有任何 retained 訊息，代表這是新房間 → 推送本地狀態
       clearTimeout(mqttSubscribeFallbackTimer);
       mqttSubscribeFallbackTimer = setTimeout(() => {
-        if (!mqttGotInitial){
-          console.log('[MQTT] 新房間，推送本地狀態為 retained');
-          publishToMQTT();
-        }
+        if (!mqttGotInitial){ console.log('[MQTT] 新房間，推送本地狀態為 retained'); publishToMQTT(); }
       }, 800);
     });
   });
@@ -743,81 +791,38 @@ function connectMQTT(){
   mqttClient.on('message', (t, payload) => {
     if (t !== topic) return;
     let msg;
-    try {
-      msg = JSON.parse(payload.toString());
-    } catch (e) {
-      console.warn('[MQTT] 訊息解析失敗', e);
-      return;
-    }
-    // 自己的訊息忽略
+    try { msg = JSON.parse(payload.toString()); } catch (e) { return; }
     if (msg.clientId === CLIENT_ID) return;
-
     mqttGotInitial = true;
     clearTimeout(mqttSubscribeFallbackTimer);
-
-    // 舊訊息忽略
     if (typeof msg.ts !== 'number') return;
     if (msg.ts <= lastRemoteTs) return;
-    // 比本地更舊的訊息忽略（避免覆蓋本地剛做的修改）
-    if (msg.ts <= lastLocalTs) {
-      lastRemoteTs = Math.max(lastRemoteTs, msg.ts);
-      return;
-    }
-
+    if (msg.ts <= lastLocalTs){ lastRemoteTs = Math.max(lastRemoteTs, msg.ts); return; }
     lastRemoteTs = msg.ts;
     state = normalizeState(msg.state);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
     renderAll();
     updateSyncBadge('收到遠端更新');
     updateRoomCardStatus();
   });
 
-  mqttClient.on('reconnect', () => {
-    mqttStatus = 'connecting';
-    updateSyncBadge();
-    updateRoomCardStatus();
-  });
-  mqttClient.on('close', () => {
-    if (mqttStatus !== 'offline'){
-      mqttStatus = 'offline';
-      updateSyncBadge();
-      updateRoomCardStatus();
-    }
-  });
-  mqttClient.on('offline', () => {
-    mqttStatus = 'offline';
-    updateSyncBadge();
-    updateRoomCardStatus();
-  });
-  mqttClient.on('error', (err) => {
-    console.warn('[MQTT] 錯誤', err && err.message);
-    updateSyncBadge();
-    updateRoomCardStatus();
-  });
+  mqttClient.on('reconnect', () => { mqttStatus = 'connecting'; updateSyncBadge(); updateRoomCardStatus(); });
+  mqttClient.on('close', () => { if (mqttStatus !== 'offline'){ mqttStatus = 'offline'; updateSyncBadge(); updateRoomCardStatus(); } });
+  mqttClient.on('offline', () => { mqttStatus = 'offline'; updateSyncBadge(); updateRoomCardStatus(); });
+  mqttClient.on('error', (err) => { console.warn('[MQTT] 錯誤', err && err.message); updateSyncBadge(); updateRoomCardStatus(); });
 }
 
-/** 把目前 state 推送到 MQTT（retained） */
 function publishToMQTT(){
   if (!mqttClient || !mqttClient.connected) return;
-  const topic = currentTopic();
   try {
-    mqttClient.publish(topic, JSON.stringify({
-      ts: lastLocalTs || Date.now(),
-      clientId: CLIENT_ID,
-      state
+    mqttClient.publish(currentTopic(), JSON.stringify({
+      ts: lastLocalTs || Date.now(), clientId: CLIENT_ID, state
     }), { qos: 1, retain: true });
-  } catch (e) {
-    console.warn('[MQTT] 發布失敗', e);
-  }
+  } catch (e) { console.warn('[MQTT] 發布失敗', e); }
 }
 
-/** 從其他分頁（同機）收到更新 */
 function onExternalChange(){
-  const remote = normalizeState(readLocal());
-  // 同機廣播沒有時間戳比較，直接採用（LocalStorage 已是最新）
-  state = remote;
+  state = normalizeState(readLocal());
   renderAll();
   updateRoomCardStatus();
 }
@@ -832,9 +837,7 @@ window.addEventListener('storage', (e) => {
   if (e.key === STORAGE_KEY) onExternalChange();
   if (e.key === ROOM_CODE_KEY) {
     roomCode = sanitizeRoomCode(e.newValue || '');
-    updateSyncBadge();
-    updateRoomCardStatus();
-    connectMQTT();
+    updateSyncBadge(); updateRoomCardStatus(); connectMQTT();
   }
 });
 
@@ -848,30 +851,17 @@ function updateSyncBadge(transientText){
   const statusEl = el && el.querySelector('.sb-status');
   const roomEl = document.getElementById('syncRoomLabel');
   if (!el || !statusEl) return;
-
   el.classList.remove('online','offline','connecting');
-
   let cls, text;
-  if (mqttStatus === 'online'){
-    cls = 'online';
-    text = '已連接';
-  } else if (mqttStatus === 'connecting'){
-    cls = 'connecting';
-    text = '連線中…';
-  } else {
-    cls = 'offline';
-    text = '離線（僅同機同步）';
-  }
+  if (mqttStatus === 'online'){ cls = 'online'; text = '已連接'; }
+  else if (mqttStatus === 'connecting'){ cls = 'connecting'; text = '連線中…'; }
+  else { cls = 'offline'; text = '離線（僅同機同步）'; }
   el.classList.add(cls);
-
   if (transientText){
     statusEl.textContent = transientText;
     clearTimeout(_badgeTransient);
     _badgeTransient = setTimeout(() => updateSyncBadge(), 1800);
-  } else {
-    statusEl.textContent = text;
-  }
-
+  } else { statusEl.textContent = text; }
   if (roomEl) roomEl.textContent = 'ROOM // ' + roomCode;
   updateRoomCardStatus();
 }
@@ -881,16 +871,9 @@ function updateRoomCardStatus(){
   const codeDisplay = document.getElementById('roomCodeDisplay');
   if (codeDisplay) codeDisplay.textContent = roomCode;
   if (cardStatus){
-    if (mqttStatus === 'online'){
-      cardStatus.textContent = '● 已連線（跨設備即時同步啟用）';
-      cardStatus.style.color = '#15803d';
-    } else if (mqttStatus === 'connecting'){
-      cardStatus.textContent = '● 連線中…';
-      cardStatus.style.color = '#b45309';
-    } else {
-      cardStatus.textContent = '● 未連線（僅同機多分頁同步）';
-      cardStatus.style.color = '#b91c1c';
-    }
+    if (mqttStatus === 'online'){ cardStatus.textContent = '● 已連線（跨設備即時同步啟用）'; cardStatus.style.color = '#15803d'; }
+    else if (mqttStatus === 'connecting'){ cardStatus.textContent = '● 連線中…'; cardStatus.style.color = '#b45309'; }
+    else { cardStatus.textContent = '● 未連線（僅同機多分頁同步）'; cardStatus.style.color = '#b91c1c'; }
   }
 }
 
@@ -905,13 +888,11 @@ function esc(str){
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[m]));
 }
-
 function fmtTime(ts){
   const d = new Date(ts);
   const p = n => String(n).padStart(2, '0');
   return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
-
 function toast(msg){
   const el = $('#toast');
   el.textContent = msg;
@@ -919,12 +900,10 @@ function toast(msg){
   clearTimeout(toast._timer);
   toast._timer = setTimeout(() => el.classList.remove('show'), 2000);
 }
-
 function addLog(action){
   state.logs.unshift({ time: Date.now(), who: operator || '未命名', action });
   if (state.logs.length > 20) state.logs.length = 20;
 }
-
 function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false, onOpen = null){
   return new Promise(resolve => {
     const overlay = $('#modalOverlay');
@@ -935,16 +914,12 @@ function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false,
     btnConfirm.textContent = confirmText;
     btnCancel.style.display = hideCancel ? 'none' : '';
     overlay.classList.add('show');
-
     if (typeof onOpen === 'function'){
       setTimeout(() => { try { onOpen(overlay); } catch(e){ console.warn(e); } }, 30);
     }
-
     function cleanup(){
       overlay.classList.remove('show');
-      btnConfirm.onclick = null;
-      btnCancel.onclick = null;
-      overlay.onclick = null;
+      btnConfirm.onclick = null; btnCancel.onclick = null; overlay.onclick = null;
       document.removeEventListener('keydown', onKey);
     }
     function onKey(e){
@@ -957,7 +932,6 @@ function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false,
     document.addEventListener('keydown', onKey);
   });
 }
-
 function askPassword(title, message, confirmText = '確定'){
   return new Promise(resolve => {
     const overlay = $('#modalOverlay');
@@ -977,9 +951,7 @@ function askPassword(title, message, confirmText = '確定'){
     setTimeout(() => { try { input.focus(); } catch(e){} }, 50);
     function cleanup(){
       overlay.classList.remove('show');
-      btnConfirm.onclick = null;
-      btnCancel.onclick = null;
-      overlay.onclick = null;
+      btnConfirm.onclick = null; btnCancel.onclick = null; overlay.onclick = null;
       document.removeEventListener('keydown', onKey);
     }
     function onKey(e){
@@ -994,56 +966,123 @@ function askPassword(title, message, confirmText = '確定'){
 }
 
 /* ================================================================
-   6. 業務邏輯
+   6. 登入邏輯
+   ================================================================ */
+function normalizeName(s){
+  return String(s || '').trim().replace(/\s+/g, '').toLowerCase();
+}
+function findMember(input){
+  const n = normalizeName(input);
+  if (!n) return null;
+  return ALLOWED_MEMBERS.find(m => normalizeName(m) === n) || null;
+}
+function showLoginScreen(){
+  const scr = document.getElementById('loginScreen');
+  scr.hidden = false;
+  scr.style.display = 'flex';
+  const input = document.getElementById('loginNameInput');
+  const err = document.getElementById('loginError');
+  input.value = '';
+  err.hidden = true;
+  err.textContent = '';
+  setTimeout(() => { try { input.focus(); } catch(e){} }, 80);
+}
+function hideLoginScreen(){
+  const scr = document.getElementById('loginScreen');
+  scr.style.display = 'none';
+  scr.hidden = true;
+}
+function tryLogin(){
+  const input = document.getElementById('loginNameInput');
+  const err = document.getElementById('loginError');
+  const raw = input.value;
+  if (!raw.trim()){
+    err.textContent = '請先輸入你的名字';
+    err.hidden = false;
+    input.focus();
+    return;
+  }
+  const member = findMember(raw);
+  if (!member){
+    err.textContent = '名字不在允許名單中，請確認後再試';
+    err.hidden = false;
+    input.select();
+    return;
+  }
+  sessionStorage.setItem(LOGIN_KEY, member);
+  enterApp(member);
+  toast('歡迎，' + member);
+}
+function enterApp(name){
+  operator = name;
+  sessionStorage.setItem('bingoOperator', name);
+  const opInput = document.getElementById('operatorInput');
+  if (opInput) opInput.value = name;
+
+  hideLoginScreen();
+
+  if (!appBootstrapped){
+    appBootstrapped = true;
+    bootstrap();
+  }
+}
+function logout(){
+  sessionStorage.removeItem(LOGIN_KEY);
+  sessionStorage.removeItem('bingoOperator');
+  operator = '未登入';
+  const opInput = document.getElementById('operatorInput');
+  if (opInput) opInput.value = '';
+  showLoginScreen();
+  toast('已登出');
+}
+function checkExistingLogin(){
+  const saved = sessionStorage.getItem(LOGIN_KEY);
+  if (saved && ALLOWED_MEMBERS.includes(saved)){
+    enterApp(saved);
+    return true;
+  }
+  return false;
+}
+
+/* ================================================================
+   7. 業務邏輯
    ================================================================ */
 function getCurrentStackRemaining(colorName){
   const info = state.colors[colorName];
   if (!info || info.stacks <= 0 || info.remaining <= 0) return 0;
   const total = info.stacks * TICKETS_PER_STACK;
   const used = total - info.remaining;
-  const usedInCurrentStack = used % TICKETS_PER_STACK;
-  return TICKETS_PER_STACK - usedInCurrentStack;
+  return TICKETS_PER_STACK - (used % TICKETS_PER_STACK);
 }
-
 function calcGlobalRemainingFromStack(colorName, stackRemain){
   const info = state.colors[colorName];
   const total = info.stacks * TICKETS_PER_STACK;
   const used = total - info.remaining;
   const usedInPrevStacks = Math.floor(used / TICKETS_PER_STACK) * TICKETS_PER_STACK;
-  const newUsed = usedInPrevStacks + (TICKETS_PER_STACK - stackRemain);
-  return Math.max(0, Math.min(total, total - newUsed));
+  return Math.max(0, Math.min(total, total - (usedInPrevStacks + (TICKETS_PER_STACK - stackRemain))));
 }
-
 function formatRemainingStacks(remaining){
-  if (remaining <= 0){
-    return '<span class="sr-out">0 疊</span>';
-  }
+  if (remaining <= 0) return '<span class="sr-out">0 疊</span>';
   const fullStacks = Math.floor(remaining / TICKETS_PER_STACK);
   const loose = remaining % TICKETS_PER_STACK;
-  if (loose === 0){
-    return `<span class="sr-main">${fullStacks} 疊</span>`;
-  }
+  if (loose === 0) return `<span class="sr-main">${fullStacks} 疊</span>`;
   return `<span class="sr-main">${fullStacks}</span> + <span class="sr-loose">(${loose} 張)</span>`;
 }
-
 function getRecommendedColor(){
   const candidates = COLOR_LIST.filter(c =>
     state.colors[c.name].remaining > 0 && !state.usedThisSession.includes(c.name)
   );
   if (!candidates.length) return null;
   candidates.sort((a, b) => {
-    const ra = state.colors[a.name].remaining;
-    const rb = state.colors[b.name].remaining;
+    const ra = state.colors[a.name].remaining, rb = state.colors[b.name].remaining;
     if (ra !== rb) return ra - rb;
     return COLOR_LIST.indexOf(a) - COLOR_LIST.indexOf(b);
   });
   return candidates[0].name;
 }
-
 function applyColor(ch, colorName){
   const channelLabel = ch === 'cash' ? '現金通道' : '電子支付通道';
   const oldColor = state.channels[ch].currentColor;
-
   if (oldColor && oldColor !== colorName){
     const stackRemain = getCurrentStackRemaining(oldColor);
     if (stackRemain > 0){
@@ -1053,21 +1092,17 @@ function applyColor(ch, colorName){
       addLog(`${channelLabel} 切換顏色：自動結算「${oldColor}」本疊剩 ${stackRemain} 張（全域剩餘 ${oldRemaining} → ${newRemaining}）`);
     }
   }
-
   state.channels[ch].currentColor = colorName;
   if (!state.usedThisSession.includes(colorName)) state.usedThisSession.push(colorName);
   addLog(`${channelLabel} 切換目前顏色為「${colorName}」`);
-  persist();
-  renderAll();
+  persist(); renderAll();
 }
-
 async function selectColor(ch, colorName, skipConfirm = false){
   const cur = state.channels[ch].currentColor;
   if (colorName === cur) { toast('此顏色已是目前使用顏色'); return; }
   const other = ch === 'cash' ? 'epay' : 'cash';
   const otherLabel = other === 'cash' ? '現金通道' : '電子支付通道';
   const thisLabel  = ch === 'cash' ? '現金通道' : '電子支付通道';
-
   if (state.colors[colorName].remaining <= 0){
     await askConfirm('無法選用', `<p>「<b>${esc(colorName)}</b>」票數已用完，無法選用。</p>`, '知道了', true);
     return;
@@ -1075,10 +1110,8 @@ async function selectColor(ch, colorName, skipConfirm = false){
   if (state.usedThisSession.includes(colorName)){
     const byOther = state.channels[other].currentColor === colorName;
     const msg = byOther
-      ? `<p>「<b>${esc(colorName)}</b>」本場已由 <b>${otherLabel}</b> 使用。</p>
-         <p class="warn-text">同一場次內，兩通道合計不可重複使用同一顏色。</p>`
-      : `<p>「<b>${esc(colorName)}</b>」本場已經出現過。</p>
-         <p class="warn-text">同一場次內，每種顏色只能出現一次。</p>`;
+      ? `<p>「<b>${esc(colorName)}</b>」本場已由 <b>${otherLabel}</b> 使用。</p><p class="warn-text">同一場次內，兩通道合計不可重複使用同一顏色。</p>`
+      : `<p>「<b>${esc(colorName)}</b>」本場已經出現過。</p><p class="warn-text">同一場次內，每種顏色只能出現一次。</p>`;
     await askConfirm('顏色衝突', msg, '知道了', true);
     return;
   }
@@ -1089,24 +1122,18 @@ async function selectColor(ch, colorName, skipConfirm = false){
     let oldDesc = '';
     if (cur && oldStack > 0 && oldRemainInfo){
       const afterRemain = Math.max(0, oldRemainInfo.remaining - oldStack);
-      oldDesc = `<p class="hint">
-        切換後，「<b>${esc(cur)}</b>」本疊剩 <b>${oldStack}</b> 張會自動視為用完並扣除：
-        全域剩餘 ${oldRemainInfo.remaining} → <b>${afterRemain}</b> 張
-        （剩餘疊數變為 ${formatRemainingStacks(afterRemain).replace(/<[^>]+>/g,'')}）
-      </p>`;
+      oldDesc = `<p class="hint">切換後，「<b>${esc(cur)}</b>」本疊剩 <b>${oldStack}</b> 張會自動視為用完並扣除：全域剩餘 ${oldRemainInfo.remaining} → <b>${afterRemain}</b> 張（剩餘疊數變為 ${formatRemainingStacks(afterRemain).replace(/<[^>]+>/g,'')}）</p>`;
     }
     const ok = await askConfirm('切換目前顏色',
       `<p>將 <b>${thisLabel}</b> 的目前顏色設為：</p>
        <div class="modal-swatch" style="background:${c.hex};color:${c.text}">${esc(colorName)}</div>
        <p>此顏色目前全域剩餘 <b>${state.colors[colorName].remaining}</b> 張，選用後將標記為「本場已使用」。</p>
-       ${oldDesc}
-       <p class="hint">此操作會即時同步到所有裝置。</p>`,
+       ${oldDesc}<p class="hint">此操作會即時同步到所有裝置。</p>`,
       '確定切換');
     if (!ok) return;
   }
   applyColor(ch, colorName);
 }
-
 async function recommend(ch){
   const pick = getRecommendedColor();
   if (!pick){
@@ -1116,8 +1143,7 @@ async function recommend(ch){
       '知道了', true);
     return;
   }
-  const c = COLOR_MAP[pick];
-  const remain = state.colors[pick].remaining;
+  const c = COLOR_MAP[pick], remain = state.colors[pick].remaining;
   const ok = await askConfirm('自動推薦下一款顏色',
     `<p>推薦邏輯：排除本場已用與已用完的顏色，優先選擇<b>剩餘票數最少</b>者（先清庫存）。</p>
      <div class="modal-swatch" style="background:${c.hex};color:${c.text}">${esc(pick)}</div>
@@ -1127,7 +1153,6 @@ async function recommend(ch){
   if (!ok) return;
   await selectColor(ch, pick, true);
 }
-
 async function submitRemain(ch){
   const sec = $('#page-' + ch);
   const input = $('.channel-remain-input', sec);
@@ -1145,13 +1170,10 @@ async function submitRemain(ch){
   let val = Math.floor(Number(raw));
   if (val < 0) val = 0;
   if (val > TICKETS_PER_STACK) val = TICKETS_PER_STACK;
-
   const info = state.colors[cur];
   const oldStackRemain = getCurrentStackRemaining(cur);
   if (val === oldStackRemain){ toast('沒有變更'); return; }
-
   const newRemain = calcGlobalRemainingFromStack(cur, val);
-
   const ok = await askConfirm('確認登記本疊剩餘票數',
     `<p>顏色：<b>${esc(cur)}</b>（共 ${info.stacks} 疊）</p>
      <p>本疊剩餘：<b>${oldStackRemain}</b> → <b>${val}</b> 張</p>
@@ -1160,22 +1182,18 @@ async function submitRemain(ch){
      <p class="hint">此操作會即時同步到所有裝置。</p>`,
     '確定登記');
   if (!ok){ renderChannel(ch); return; }
-
   info.remaining = newRemain;
   addLog(`${channelLabel} 登記「${cur}」本疊剩餘 ${val} 張（全域剩餘 ${newRemain}）`);
-  persist();
-  renderAll();
+  persist(); renderAll();
 }
 
 /* ================================================================
-   7. 渲染：設定頁
+   8. 渲染
    ================================================================ */
 function renderAdmin(){
-  const noInput = $('#sessionNoInput');
-  const nmInput = $('#sessionNameInput');
+  const noInput = $('#sessionNoInput'), nmInput = $('#sessionNameInput');
   if (document.activeElement !== noInput) noInput.value = state.sessionNo;
   if (document.activeElement !== nmInput) nmInput.value = state.sessionName || '';
-
   const tbody = $('#adminTable tbody');
   const activeInTable = document.activeElement && document.activeElement.closest && document.activeElement.closest('#adminTable');
   if (!activeInTable){
@@ -1200,7 +1218,6 @@ function renderAdmin(){
       </tr>`;
     }).join('');
   }
-
   const logList = $('#logList');
   if (!state.logs.length){
     logList.innerHTML = '<li class="empty">尚無操作紀錄</li>';
@@ -1213,28 +1230,20 @@ function renderAdmin(){
       </li>`).join('');
   }
 }
-
 async function applyRowChanges(colorName){
   const tr = $(`#adminTable tr[data-color="${colorName}"]`);
   if (!tr) return;
   const stacksInput = $('.stacks-input', tr);
   const remainInput = $('.remain-input', tr);
   const info = state.colors[colorName];
-
   const newStacks = Math.max(0, Math.floor(Number(stacksInput.value) || 0));
   const newRemain = Math.max(0, Math.floor(Number(remainInput.value) || 0));
-
-  if (newStacks === info.stacks && newRemain === info.remaining){
-    toast('沒有變更');
-    return;
-  }
-
+  if (newStacks === info.stacks && newRemain === info.remaining){ toast('沒有變更'); return; }
   if (newStacks !== info.stacks){
     const newTotal = newStacks * TICKETS_PER_STACK;
     const delta = (newStacks - info.stacks) * TICKETS_PER_STACK;
     let calcRemain = info.remaining + delta;
     calcRemain = Math.max(0, Math.min(newTotal, calcRemain));
-
     const ok = await askConfirm('確認變更疊數',
       `<p>「<b>${esc(colorName)}</b>」的疊數將由 <b>${info.stacks}</b> 改為 <b>${newStacks}</b>。</p>
        <p>總票數：${info.total} → <b>${newTotal}</b>（每疊 ${TICKETS_PER_STACK} 張）</p>
@@ -1242,37 +1251,25 @@ async function applyRowChanges(colorName){
        <p class="hint">此操作會立即同步到所有裝置。</p>`,
       '確定套用');
     if (!ok){ renderAdmin(); return; }
-
-    info.stacks = newStacks;
-    info.total = newTotal;
-    info.remaining = calcRemain;
+    info.stacks = newStacks; info.total = newTotal; info.remaining = calcRemain;
     addLog(`調整「${colorName}」疊數為 ${newStacks}（總票數 ${newTotal}、剩餘 ${calcRemain}）`);
-    persist();
-    renderAll();
-    return;
+    persist(); renderAll(); return;
   }
-
   if (newRemain !== info.remaining){
     const ok = await askConfirm('確認覆寫剩餘票數',
       `<p>「<b>${esc(colorName)}</b>」的剩餘票數將由 <b>${info.remaining}</b> 覆寫為 <b>${newRemain}</b>。</p>
        <p class="hint">此為手動修正，請確認無誤。</p>`,
       '確定覆寫');
     if (!ok){ renderAdmin(); return; }
-
     info.remaining = newRemain;
     addLog(`手動修正「${colorName}」剩餘票數為 ${newRemain}`);
-    persist();
-    renderAll();
+    persist(); renderAll();
   }
 }
 
-/* ================================================================
-   8. 渲染：通道頁
-   ================================================================ */
 function channelInnerHTML(title, icon){
   return `
   <div class="channel-wrap">
-
     <div class="card span-full current-card">
       <h2>${icon} ${title} · 目前使用顏色</h2>
       <div class="current-color-box empty">尚未選擇</div>
@@ -1282,16 +1279,13 @@ function channelInnerHTML(title, icon){
         <span>本場已出現顏色：<b class="qi-used-count">0 / 9</b></span>
       </div>
     </div>
-
     <div class="card">
       <h2>操作</h2>
       <button class="btn primary full recommend-btn">System 推薦下一款顏色</button>
-
       <div class="field">
         <label>手動選擇顏色（僅列出本場未使用且仍有票的顏色）</label>
         <div class="color-picker"></div>
       </div>
-
       <div class="field">
         <label>登記本疊剩餘票數（0 ～ 60 張）</label>
         <div class="row">
@@ -1303,45 +1297,33 @@ function channelInnerHTML(title, icon){
           <b>要切換到下一款顏色</b>時不必輸入，系統會自動把本疊剩餘（含整疊未用）視為用完並扣除。
         </p>
       </div>
-
       <p class="hint">快捷鍵：<kbd>R</kbd> 觸發推薦顏色、在剩餘票數欄位按 <kbd>Enter</kbd> 送出。</p>
     </div>
-
     <div class="card">
       <h2>本場已出現顏色</h2>
       <div class="used-chips"></div>
       <p class="hint">同一場次內每種顏色只能出現一次（現金通道與電子支付通道合計）。</p>
     </div>
-
   </div>`;
 }
-
 function renderChannel(ch){
   const sec = $('#page-' + ch);
   if (!sec) return;
   const cur = state.channels[ch].currentColor;
   const info = cur ? state.colors[cur] : null;
-
   const box = $('.current-color-box', sec);
   if (cur){
     const c = COLOR_MAP[cur];
-    box.style.background = c.hex;
-    box.style.color = c.text;
-    box.style.borderColor = 'transparent';
-    box.textContent = cur;
+    box.style.background = c.hex; box.style.color = c.text;
+    box.style.borderColor = 'transparent'; box.textContent = cur;
     box.classList.remove('empty');
   } else {
-    box.style.background = '';
-    box.style.color = '';
-    box.style.borderColor = '';
-    box.textContent = '尚未選擇';
-    box.classList.add('empty');
+    box.style.background = ''; box.style.color = ''; box.style.borderColor = '';
+    box.textContent = '尚未選擇'; box.classList.add('empty');
   }
-
   $('.current-stack-remain', sec).textContent = info ? getCurrentStackRemaining(cur) : '—';
   $('.current-remain', sec).textContent = info ? info.remaining : '—';
   $('.qi-used-count', sec).textContent = `${state.usedThisSession.length} / 9`;
-
   const picker = $('.color-picker', sec);
   picker.innerHTML = COLOR_LIST.map(c => {
     const ci = state.colors[c.name];
@@ -1349,13 +1331,11 @@ function renderChannel(ch){
     const usedByOther = state.usedThisSession.includes(c.name) && !isCurrent;
     const isEmpty = ci.remaining <= 0;
     const disabled = usedByOther || isEmpty;
-
     let tag;
     if (isEmpty) tag = '已用完';
     else if (usedByOther) tag = '本場已用';
     else if (ci.remaining <= 10) tag = `剩 ${ci.remaining}（快用完）`;
     else tag = `剩 ${ci.remaining}`;
-
     return `<button class="color-pick ${isCurrent ? 'active' : ''}"
               data-color="${esc(c.name)}"
               ${disabled ? 'disabled' : ''}>
@@ -1364,12 +1344,10 @@ function renderChannel(ch){
               <span class="cp-tag">${tag}</span>
             </button>`;
   }).join('');
-
   const remInput = $('.channel-remain-input', sec);
   if (document.activeElement !== remInput){
     remInput.value = info ? getCurrentStackRemaining(cur) : '';
   }
-
   const usedGrid = $('.used-chips', sec);
   usedGrid.innerHTML = COLOR_LIST.map(c => {
     const on = state.usedThisSession.includes(c.name);
@@ -1380,51 +1358,37 @@ function renderChannel(ch){
             </span>`;
   }).join('');
 }
-
-/* ================================================================
-   9. 渲染：顯示看板
-   ================================================================ */
 function renderBoard(){
   const nameSuffix = state.sessionName ? `　${state.sessionName}` : '';
   $('#boardSession').textContent = `第 ${state.sessionNo} 場${nameSuffix}`;
-
   ['cash','epay'].forEach(ch => {
     const box = $(`#page-board .board-channel[data-ch="${ch}"] .board-color-box`);
     const cur = state.channels[ch].currentColor;
     if (cur){
       const c = COLOR_MAP[cur];
-      box.style.background = c.hex;
-      box.style.color = c.text;
-      box.textContent = cur;
-      box.classList.remove('empty');
+      box.style.background = c.hex; box.style.color = c.text;
+      box.textContent = cur; box.classList.remove('empty');
     } else {
-      box.style.background = '';
-      box.style.color = '';
-      box.textContent = '尚未選擇';
-      box.classList.add('empty');
+      box.style.background = ''; box.style.color = '';
+      box.textContent = '尚未選擇'; box.classList.add('empty');
     }
   });
-
   $('#boardUsedGrid').innerHTML = COLOR_LIST.map(c => {
     const on = state.usedThisSession.includes(c.name);
     return `<div class="board-used-cell ${on ? 'on' : ''}"
               ${on ? `style="background:${c.hex};color:${c.text}"` : ''}>
-              <span>${on ? '✔' : ''}</span>
-              <span>${esc(c.name)}</span>
+              <span>${on ? '✔' : ''}</span><span>${esc(c.name)}</span>
             </div>`;
   }).join('');
-
   $('#boardRemainGrid').innerHTML = COLOR_LIST.map(c => {
     const r = state.colors[c.name].remaining;
-    const out = r <= 0;
-    const low = !out && r <= 10;
+    const out = r <= 0, low = !out && r <= 10;
     return `<div class="board-remain-cell ${out ? 'out' : ''} ${low ? 'low' : ''}">
               <span class="brc-dot" style="background:${c.hex}"></span>
               <span class="brc-name">${esc(c.name)}</span>
               <span class="brc-num">${out ? '已用完' : r}</span>
             </div>`;
   }).join('');
-
   const rec = getRecommendedColor();
   const el = $('#boardSuggest');
   if (rec){
@@ -1434,27 +1398,18 @@ function renderBoard(){
     el.innerHTML = '建議下一款：<b>無可用顏色</b>';
   }
 }
-
-/* ================================================================
-   10. 總渲染
-   ================================================================ */
 function renderAll(){
-  renderAdmin();
-  renderChannel('cash');
-  renderChannel('epay');
-  renderBoard();
-  updateRoomCardStatus();
+  renderAdmin(); renderChannel('cash'); renderChannel('epay');
+  renderBoard(); updateRoomCardStatus();
 }
 
 /* ================================================================
-   11. 房間碼管理
+   9. 房間碼管理
    ================================================================ */
 async function openRoomManager(){
-  const statusText = mqttStatus === 'online' ? '已連線' :
-                     mqttStatus === 'connecting' ? '連線中…' : '未連線';
+  const statusText = mqttStatus === 'online' ? '已連線' : mqttStatus === 'connecting' ? '連線中…' : '未連線';
   const bodyHTML = `
-    <p>房間碼用於讓多台裝置即時同步同一份資料。</p>
-    <p>所有要同步的裝置，請使用<b>相同房間碼</b>。</p>
+    <p>房間碼用於讓多台裝置即時同步同一份資料。所有要同步的裝置，請使用<b>相同房間碼</b>。</p>
     <div class="row" style="margin-top:12px">
       <div class="field" style="flex:1;min-width:200px">
         <label>房間碼（可自訂）</label>
@@ -1463,14 +1418,10 @@ async function openRoomManager(){
       </div>
     </div>
     <div class="row" style="margin-top:8px">
-      <button type="button" class="btn small" id="copyRoomBtn">複製</button>
+      <button type="button" class="btn small" id="copyRoomBtn2">複製</button>
       <button type="button" class="btn small" id="newRoomBtn">產生新房間碼</button>
     </div>
-    <p class="hint">
-      目前連線：<b>${statusText}</b><br>
-      建議使用「活動名稱-隨機碼」格式，例如 YWCSU-2026-A3F9。
-    </p>
-  `;
+    <p class="hint">目前連線：<b>${statusText}</b><br>建議使用「活動名稱-隨機碼」格式，例如 YWCSU-2026-A3F9。</p>`;
   let finalValue = null;
   await new Promise(resolve => {
     const overlay = $('#modalOverlay');
@@ -1482,35 +1433,17 @@ async function openRoomManager(){
     btnCancel.style.display = '';
     btnCancel.textContent = '取消';
     overlay.classList.add('show');
-
     const input = $('#roomCodeInput');
-    const copyBtn = $('#copyRoomBtn');
-    const newBtn = $('#newRoomBtn');
-
-    copyBtn.onclick = () => {
-      const val = input.value.trim();
-      if (!val) return;
+    $('#copyRoomBtn2').onclick = () => {
+      const val = input.value.trim(); if (!val) return;
       if (navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(val).then(
-          () => toast('已複製房間碼'),
-          () => toast('複製失敗，請手動選取')
-        );
-      } else {
-        input.select();
-        try { document.execCommand('copy'); toast('已複製'); }
-        catch(e){ toast('複製失敗，請手動選取'); }
-      }
+        navigator.clipboard.writeText(val).then(() => toast('已複製房間碼'), () => toast('複製失敗'));
+      } else { input.select(); try { document.execCommand('copy'); toast('已複製'); } catch(e){ toast('複製失敗'); } }
     };
-    newBtn.onclick = () => {
-      input.value = generateRoomCode();
-      toast('已產生新房間碼，按「套用並重連」生效');
-    };
-
+    $('#newRoomBtn').onclick = () => { input.value = generateRoomCode(); toast('已產生新房間碼，按「套用並重連」生效'); };
     function cleanup(){
       overlay.classList.remove('show');
-      btnConfirm.onclick = null;
-      btnCancel.onclick = null;
-      overlay.onclick = null;
+      btnConfirm.onclick = null; btnCancel.onclick = null; overlay.onclick = null;
       document.removeEventListener('keydown', onKey);
     }
     function onKey(e){
@@ -1522,13 +1455,9 @@ async function openRoomManager(){
     overlay.onclick = (e) => { if (e.target === overlay){ finalValue = null; cleanup(); resolve(); } };
     document.addEventListener('keydown', onKey);
   });
-
   if (finalValue === null) return;
   const newCode = sanitizeRoomCode(finalValue);
-  if (newCode === roomCode){
-    toast('房間碼沒有變更');
-    return;
-  }
+  if (newCode === roomCode){ toast('房間碼沒有變更'); return; }
   roomCode = newCode;
   localStorage.setItem(ROOM_CODE_KEY, roomCode);
   updateSyncBadge('切換房間中…');
@@ -1537,7 +1466,7 @@ async function openRoomManager(){
 }
 
 /* ================================================================
-   12. 事件綁定
+   10. 事件綁定
    ================================================================ */
 $$('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1557,29 +1486,26 @@ opInput.addEventListener('input', () => {
   sessionStorage.setItem('bingoOperator', operator);
 });
 
-/* 連線徽章點擊 → 房間管理 */
+$('#logoutBtn').addEventListener('click', async () => {
+  const ok = await askConfirm('登出', '<p>確定要登出嗎？</p><p class="hint">登出後需要重新輸入名字才能進入系統。</p>', '確定登出');
+  if (ok) logout();
+});
+
 $('#syncBadge').addEventListener('click', openRoomManager);
 $('#manageRoomBtn').addEventListener('click', openRoomManager);
 $('#copyRoomBtn').addEventListener('click', () => {
   if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(roomCode).then(
-      () => toast('已複製房間碼：' + roomCode),
-      () => toast('複製失敗')
-    );
-  } else {
-    toast('房間碼：' + roomCode);
-  }
+    navigator.clipboard.writeText(roomCode).then(() => toast('已複製房間碼：' + roomCode), () => toast('複製失敗'));
+  } else { toast('房間碼：' + roomCode); }
 });
 
 $('#saveSessionBtn').addEventListener('click', () => {
   const no = Math.max(1, Math.floor(Number($('#sessionNoInput').value) || 1));
   const nm = $('#sessionNameInput').value.trim();
   if (no === state.sessionNo && nm === (state.sessionName || '')){ toast('沒有變更'); return; }
-  state.sessionNo = no;
-  state.sessionName = nm;
+  state.sessionNo = no; state.sessionName = nm;
   addLog(`設定場次為第 ${no} 場${nm ? '（' + nm + '）' : ''}`);
-  persist();
-  renderAll();
+  persist(); renderAll();
 });
 
 $('#adminTable').addEventListener('click', (e) => {
@@ -1595,9 +1521,7 @@ $('#nextSessionBtn').addEventListener('click', async () => {
   const epayColor = state.channels.epay.currentColor;
   const cashRem = cashColor ? state.colors[cashColor].remaining : 0;
   const epayRem = epayColor ? state.colors[epayColor].remaining : 0;
-
   const usedList = state.usedThisSession.length ? state.usedThisSession.join('、') : '（無）';
-
   const keepDesc = [];
   if (cashColor && cashRem > 0){
     const stackRem = getCurrentStackRemaining(cashColor);
@@ -1607,7 +1531,6 @@ $('#nextSessionBtn').addEventListener('click', async () => {
     const stackRem = getCurrentStackRemaining(epayColor);
     keepDesc.push(`電子支付通道保留「${epayColor}」（本疊剩 ${stackRem} 張、全域剩餘 ${epayRem} 張）`);
   }
-
   const ok = await askConfirm('前往下一場',
     `<p>即將結束「<b>第 ${state.sessionNo} 場${state.sessionName ? '（' + esc(state.sessionName) + '）' : ''}</b>」。</p>
      <ul>
@@ -1623,52 +1546,35 @@ $('#nextSessionBtn').addEventListener('click', async () => {
      <p class="hint">此操作會即時同步到所有裝置。</p>`,
     '確定前往下一場');
   if (!ok) return;
-
   state.history.push({
-    session: state.sessionNo,
-    sessionName: state.sessionName || '',
-    used: [...state.usedThisSession],
-    timestamp: Date.now()
+    session: state.sessionNo, sessionName: state.sessionName || '',
+    used: [...state.usedThisSession], timestamp: Date.now()
   });
   if (state.history.length > 200) state.history = state.history.slice(-200);
-
-  state.sessionNo += 1;
-  state.sessionName = '';
-  state.usedThisSession = [];
-
+  state.sessionNo += 1; state.sessionName = ''; state.usedThisSession = [];
   if (cashColor && state.colors[cashColor] && state.colors[cashColor].remaining > 0){
     state.channels.cash.currentColor = cashColor;
     state.usedThisSession.push(cashColor);
-  } else {
-    state.channels.cash.currentColor = null;
-  }
+  } else { state.channels.cash.currentColor = null; }
   if (epayColor && state.colors[epayColor] && state.colors[epayColor].remaining > 0 && epayColor !== cashColor){
     state.channels.epay.currentColor = epayColor;
     if (!state.usedThisSession.includes(epayColor)) state.usedThisSession.push(epayColor);
-  } else {
-    state.channels.epay.currentColor = null;
-  }
-
+  } else { state.channels.epay.currentColor = null; }
   const keptLog = [];
   if (state.channels.cash.currentColor) keptLog.push(`現金:${state.channels.cash.currentColor}`);
   if (state.channels.epay.currentColor) keptLog.push(`電子:${state.channels.epay.currentColor}`);
   addLog(`前往下一場 → 第 ${state.sessionNo} 場${keptLog.length ? '（自動沿用通道顏色：' + keptLog.join('、') + '）' : ''}`);
-  persist();
-  renderAll();
+  persist(); renderAll();
   toast('已進入第 ' + state.sessionNo + ' 場');
 });
 
 $('#resetBtn').addEventListener('click', async () => {
-  const pw = await askPassword('重置整個系統',
-    '請輸入管理員密碼以確認重置：',
-    '確定重置');
+  const pw = await askPassword('重置整個系統', '請輸入管理員密碼以確認重置：', '確定重置');
   if (pw === null) return;
   if (pw !== RESET_PASSWORD){ toast('密碼錯誤，已取消重置'); return; }
-
   state = defaultState();
   addLog('重置整個系統（恢復初始狀態）');
-  persist();
-  renderAll();
+  persist(); renderAll();
   toast('系統已重置');
 });
 
@@ -1682,14 +1588,10 @@ $('#exportBtn').addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = url;
   a.download = `bingo-backup-${stamp}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-
   addLog('匯出 JSON 備份');
-  persist();
-  renderAll();
+  persist(); renderAll();
   toast('已下載備份檔');
 });
 
@@ -1700,12 +1602,10 @@ $('#importFile').addEventListener('change', (e) => {
   const reader = new FileReader();
   reader.onload = async () => {
     let parsed;
-    try {
-      parsed = JSON.parse(reader.result);
-    } catch (err) {
+    try { parsed = JSON.parse(reader.result); }
+    catch (err) {
       await askConfirm('匯入失敗', `<p>檔案格式錯誤，無法解析 JSON。</p><p class="hint">${esc(err.message)}</p>`, '知道了', true);
-      e.target.value = '';
-      return;
+      e.target.value = ''; return;
     }
     const ok = await askConfirm('匯入資料',
       `<p>確定要用此檔案的內容<b>覆蓋目前所有資料</b>嗎？</p>
@@ -1713,11 +1613,9 @@ $('#importFile').addEventListener('change', (e) => {
        <p class="hint">覆蓋後所有裝置都會同步更新。</p>`,
       '確定匯入');
     if (!ok){ e.target.value = ''; return; }
-
     state = normalizeState(parsed);
     addLog(`匯入 JSON 資料（${file.name}）`);
-    persist();
-    renderAll();
+    persist(); renderAll();
     toast('匯入完成');
     e.target.value = '';
   };
@@ -1727,18 +1625,15 @@ $('#importFile').addEventListener('change', (e) => {
 ['cash','epay'].forEach(ch => {
   const sec = $('#page-' + ch);
   if (!sec) return;
-
   sec.addEventListener('click', (e) => {
     if (e.target.closest('.recommend-btn')){ recommend(ch); return; }
     const pick = e.target.closest('.color-pick');
     if (pick && !pick.disabled){ selectColor(ch, pick.dataset.color); return; }
     if (e.target.closest('.submit-remain')){ submitRemain(ch); return; }
   });
-
   sec.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('channel-remain-input')){
-      e.preventDefault();
-      submitRemain(ch);
+      e.preventDefault(); submitRemain(ch);
     }
   });
 });
@@ -1778,117 +1673,39 @@ $('#boardFsBtn').addEventListener('click', () => {
 });
 
 /* ================================================================
-   13. 初始化
+   11. 登入畫面事件
    ================================================================ */
-(function init(){
+$('#loginBtn').addEventListener('click', tryLogin);
+$('#loginNameInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){ e.preventDefault(); tryLogin(); }
+});
+
+/* ================================================================
+   12. 初始化
+   ================================================================ */
+function bootstrap(){
   $('#page-cash').innerHTML = channelInnerHTML('現金通道', '🟢');
   $('#page-epay').innerHTML = channelInnerHTML('電子支付通道', '🔵');
-
   if (!localStorage.getItem(STORAGE_KEY)){
-    // 首次使用：寫入初始狀態（不推遠端，等 MQTT 連上後視情況推送）
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   }
-
   renderAll();
-
-  // 啟動跨設備同步
   connectMQTT();
-
-  // 每 30 秒校正一次徽章（防止某些瀏覽器事件漏接）
   setInterval(() => {
     if (mqttClient && mqttClient.connected && mqttStatus !== 'online'){
-      mqttStatus = 'online';
-      updateSyncBadge();
+      mqttStatus = 'online'; updateSyncBadge();
     } else if (mqttClient && !mqttClient.connected && mqttStatus === 'online'){
-      mqttStatus = 'offline';
-      updateSyncBadge();
+      mqttStatus = 'offline'; updateSyncBadge();
     }
   }, 30000);
+}
+
+(function init(){
+  if (!checkExistingLogin()){
+    showLoginScreen();
+  }
 })();
 </script>
 
-<!--
-====================================================================
- README：使用說明
-====================================================================
-
-【核心特色：跨設備即時同步】
- - 使用公共 MQTT broker（EMQX 免費）進行跨設備即時同步。
- - 每場活動使用一個「房間碼」隔離資料，避免和其他人混在一起。
- - 使用 MQTT retained message，新裝置一連上就自動取得最新狀態。
- - 若 MQTT 斷線或無法載入（例如完全離線），會自動退回「同機多分頁同步」，
-   功能不會中斷，只是跨設備同步停用。
-
-【多設備使用流程（重點）】
- 1) 第一台裝置（例如組長的電腦）：
-    - 打開網頁 → 右上角徽章顯示「已連接」與房間碼（例如 YWCSU-2026-A3F9）。
-    - 若未自動產生，點擊右上角徽章 → 按「產生新房間碼」→「套用並重連」。
-    - 完成組長頁的場次、疊數設定。
- 2) 其他裝置（手機、平板、另一台電腦）：
-    - 打開同一個網頁。
-    - 點擊右上角徽章 → 把房間碼改成與第一台裝置相同 →「套用並重連」。
-    - 徽章變綠（已連接）後即完成同步。
- 3) 之後任何一台裝置操作（選色、更新票數、換場……），
-    其他裝置會在 1 秒內自動看到更新。
-
-【各頁面用途】
- 1. 設定頁        —— 房間碼管理、場次設定、每色疊數、手動修正剩餘票數、換場、重置、備份／還原、查看操作紀錄。
- 2. 現金通道頁    —— 選擇／推薦現金通道目前使用的顏色、登記該顏色「本疊」剩餘票數。
- 3. 電子支付通道頁 —— 同上，但為電子支付通道（與現金通道顏色不可重複）。
- 4. 顯示看板頁    —— 給現場大螢幕觀看：場次、時間、兩通道目前顏色、本場已出現顏色、各色剩餘票數、建議下一款。
-
-【開場前設定流程】
- 1) 第一台裝置開啟「設定頁」，複製房間碼。
- 2) 其他裝置貼上同一房間碼並套用。
- 3) 在「顏色總表」調整每種顏色的疊數（每疊 60 張），按「套用」並確認。
- 4) 確認各色剩餘票數正確（必要時手動覆寫）。
- 5) 切換到「顯示看板」頁，按右上角「⛶ 全螢幕」放大顯示。
-
-【顏色總表的「剩餘疊數」顯示規則】
- - 有整疊 + 散票：顯示「X + (Y 張)」→ 例如 2 + (40 張)
- - 純整疊：顯示「X 疊」
- - 已用完：顯示「0 疊」（紅字）
-
-【通道頁登記剩餘票數（重要）】
- - 本輪顏色「還在使用中」時，才需要手動登記本疊剩餘票數（0～60），用於盤點修正。
- - 要「切換到下一款顏色」時不必輸入，系統會自動把本疊剩餘（含整疊未用）視為用完並扣除。
-
-【換場操作流程】
- 1) 在「設定頁」按「下一場」。
- 2) 於二次確認視窗確認後，系統自動：
-    · 場次 +1、本場已用紀錄清空並寫入歷史
-    · 未用完顏色保留剩餘票數
-    · 已用完（剩餘 0）顏色維持不可選用
-    · 兩通道目前顏色自動沿用為新場次第一款顏色（只要該顏色仍有剩餘票數）
-    · 沿用的顏色會自動列入新場次的「已出現顏色」
- 3) 兩通道頁直接顯示沿用的顏色與剩餘票數，可立即繼續售票。
-
-【重置系統】
- - 在「設定頁」按「重置系統」。
- - 於彈窗輸入管理員密碼：123456。
- - 密碼正確才會執行重置，並恢復為初始狀態。
-
-【備份與還原方式】
- - 備份：設定頁 →「匯出 JSON 備份」→ 會下載 bingo-backup-YYYYMMDD-HHmm.json。
- - 還原：設定頁 →「匯入 JSON 還原」→ 選擇備份檔 → 確認覆蓋。
-
-【注意事項】
- - 同一場次內，同一顏色只能出現一次（現金與電子支付合計）。
- - 換場後，兩通道沿用的顏色已自動標記為本場已用，其他顏色仍可正常選用。
- - 所有破壞性操作（變更疊數、覆寫剩餘票數、換場、重置、匯入）皆有二次確認（重置以密碼確認）。
- - 資料存於 localStorage（本地備份）＋ MQTT（跨設備同步）。
- - 若多台裝置幾乎同時修改同一個欄位，以「最後送出者」為準（時間戳較新者勝）。
- - 快捷鍵：通道頁按 R 觸發推薦顏色；在剩餘票數欄位按 Enter 送出。
-
-【技術說明：跨設備同步如何運作】
- - 使用 mqtt.js 連接 wss://broker.emqx.io:8084/mqtt（EMQX 公共免費 broker）。
- - Topic 格式：ywcsu-bingo/<房間碼>。
- - 每次修改：帶 {ts, clientId, state} 以 retained 方式發送。
- - 收到訊息：若 msg.ts 比本地時間戳新 → 覆蓋本地狀態。
- - 新裝置連上：先等待 retained 訊息（800ms），若無則推送自己的狀態為 retained，
-   避免「新開分頁瞬間把舊資料蓋掉」的問題。
- - 同機多分頁：仍使用 BroadcastChannel + storage 事件做即時同步（速度更快、無需網路）。
-====================================================================
--->
 </body>
 </html>
