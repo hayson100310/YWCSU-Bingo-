@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>YWCSU Bingo 票務管理系統</title>
 <link rel="icon" href="logo.png" type="image/x-icon">
+<!-- 跨設備即時同步用：MQTT over WebSocket -->
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <style>
 /* ============================================================
    全域設定
@@ -34,13 +36,7 @@ input{font-family:inherit;font-size:16px}
   display:flex;align-items:center;gap:10px;padding:10px 16px 4px;
   max-width:1200px;margin:0 auto;flex-wrap:wrap;
 }
-.app-title .logo{
-  width:30px;height:30px;border-radius:8px;flex:none;
-  background:linear-gradient(135deg,#FFD93D,#FF9F1C);
-  display:flex;align-items:center;justify-content:center;font-weight:900;color:#1B3A6B;font-size:15px;
-}
 .app-title h1{font-size:17px;font-weight:700;letter-spacing:.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sync-badge{font-size:11px;opacity:.9;background:rgba(255,255,255,.15);padding:3px 10px;border-radius:999px;white-space:nowrap}
 .operator{display:flex;align-items:center;gap:6px;font-size:12px;color:#dbe6f7}
 .operator input{
   border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:4px 10px;
@@ -48,6 +44,33 @@ input{font-family:inherit;font-size:16px}
 }
 .operator input::placeholder{color:rgba(255,255,255,.5)}
 .operator input:focus{border-color:#7EC8E3;background:rgba(255,255,255,.2)}
+
+/* 連線狀態徽章（可點擊管理） */
+.sync-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:11px;background:rgba(255,255,255,.15);
+  padding:4px 10px;border-radius:999px;
+  white-space:nowrap;cursor:pointer;transition:.15s;
+  border:1px solid rgba(255,255,255,.15);
+}
+.sync-badge:hover{background:rgba(255,255,255,.25);border-color:rgba(255,255,255,.4)}
+.sb-led{
+  width:6px;height:6px;border-radius:50%;
+  background:#9aa3b5;flex:none;
+  transition:background .2s, box-shadow .2s;
+}
+.sync-badge.online .sb-led{background:#2edb7a;box-shadow:0 0 6px rgba(46,219,122,.8)}
+.sync-badge.offline .sb-led{background:#E63946;box-shadow:0 0 6px rgba(230,57,70,.7)}
+.sync-badge.connecting .sb-led{background:#FF9F1C;box-shadow:0 0 6px rgba(255,159,28,.8);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sb-status{font-weight:600;letter-spacing:.2px}
+.sb-room{
+  font-family:"JetBrains Mono","Menlo",monospace;
+  font-size:10.5px;letter-spacing:.05em;
+  padding-left:8px;border-left:1px solid rgba(255,255,255,.25);
+  opacity:.85;
+}
+
 .tab-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 12px 12px;max-width:1200px;margin:0 auto}
 .tab{
   border:none;background:transparent;font-family:inherit;cursor:pointer;
@@ -57,12 +80,7 @@ input{font-family:inherit;font-size:16px}
 .tab:hover{background:rgba(255,255,255,.1)}
 .tab.active{background:#fff;color:#1B3A6B;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .tab .tab-sub{display:block;font-size:10px;font-weight:400;opacity:.7;margin-top:1px}
-footer {
-    text-align: center;
-    padding: 20px;
-    background-color: #f1f1f1;
-}
-
+footer{text-align:center;padding:20px;background-color:#f1f1f1;font-size:12px;color:#8a93a6}
 
 /* ============================================================
    版面與卡片
@@ -134,20 +152,17 @@ input:focus,select:focus{outline:2px solid #7EC8E3;border-color:#1B3A6B;backgrou
 #adminTable tr.used-row td{opacity:.55}
 #adminTable .stacks-input,#adminTable .remain-input{width:82px;padding:6px 9px;font-size:14px}
 #adminTable .apply-row{padding:6px 12px;font-size:12px;border-radius:8px}
-/* 剩餘疊數欄 */
 #adminTable .stack-remain-cell{white-space:nowrap;font-weight:700}
 #adminTable .stack-remain-cell .sr-main{color:#1B3A6B}
 #adminTable .stack-remain-cell .sr-loose{color:#c26a00;font-size:12.5px}
 #adminTable .stack-remain-cell .sr-out{color:#E63946;font-weight:800}
 
-/* 色塊 */
 .swatch{
   display:inline-block;width:22px;height:22px;border-radius:7px;
   vertical-align:middle;margin-right:8px;border:1px solid rgba(0,0,0,.12);
 }
 .dot{width:22px;height:22px;border-radius:7px;flex:none;display:inline-block;border:1px solid rgba(0,0,0,.08)}
 
-/* 標籤 */
 .tag{
   display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;
   background:#eef1f6;color:#8a93a6;font-weight:700;white-space:nowrap;
@@ -292,7 +307,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 }
 .modal-overlay.show{display:flex}
 .modal{
-  background:#fff;border-radius:16px;width:100%;max-width:440px;padding:20px;
+  background:#fff;border-radius:16px;width:100%;max-width:480px;padding:20px;
   box-shadow:0 24px 70px rgba(0,0,0,.35);animation:pop .18s ease;
   max-height:88vh;overflow-y:auto;
 }
@@ -306,6 +321,12 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 .modal-swatch{
   margin:12px 0;padding:16px;border-radius:12px;text-align:center;
   font-size:24px;font-weight:900;letter-spacing:4px;box-shadow:0 4px 14px rgba(0,0,0,.15);
+}
+.room-code-display{
+  font-family:"JetBrains Mono","Menlo",monospace;
+  letter-spacing:.15em;font-size:15px;
+  background:#fff;border:1px dashed #7EC8E3;border-radius:8px;
+  padding:10px 12px;word-break:break-all;color:#1B3A6B;font-weight:700;
 }
 #toast{
   position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(90px);
@@ -323,6 +344,8 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
   .app-title h1{font-size:15px;flex-basis:100%}
   .operator{flex:1}
   .operator input{flex:1;width:auto}
+  .sync-badge{font-size:10px;padding:3px 8px;gap:5px}
+  .sb-room{font-size:9.5px;padding-left:6px}
   .tab-bar{gap:5px;padding:6px 8px 10px}
   .tab{font-size:12.5px}
   .tab .tab-sub{font-size:9px}
@@ -355,7 +378,11 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
       <label for="operatorInput">操作者</label>
       <input id="operatorInput" type="text" maxlength="12" placeholder="暱稱">
     </div>
-    <span class="sync-badge" id="syncBadge">已就緒</span>
+    <span class="sync-badge connecting" id="syncBadge" title="點擊管理房間連線">
+      <span class="sb-led"></span>
+      <span class="sb-status">初始化中…</span>
+      <span class="sb-room" id="syncRoomLabel">ROOM // ----</span>
+    </span>
   </div>
   <nav class="tab-bar">
     <button class="tab tab-btn active" data-tab="admin">設定<span class="tab-sub">設定／庫存／備份</span></button>
@@ -368,6 +395,25 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 <main>
 
   <section id="page-admin" class="page active">
+
+    <!-- 房間連線管理 -->
+    <div class="card">
+      <h2>📡 房間連線<span class="h2-tag" id="roomCardStatus">檢查中…</span></h2>
+      <p class="hint" style="margin-top:0">
+        房間碼用於讓多台裝置（手機、平板、電腦）即時同步同一份資料。所有要同步的裝置，請輸入<b>相同房間碼</b>。
+      </p>
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="flex:1;min-width:220px">
+          <label>當前房間碼</label>
+          <div class="room-code-display" id="roomCodeDisplay">----</div>
+        </div>
+        <button id="copyRoomBtn" class="btn">複製</button>
+        <button id="manageRoomBtn" class="btn primary">更改房間碼</button>
+      </div>
+      <p class="hint">
+        ⚠️ 更換房間碼後，本裝置會切到新房間，其他裝置請一併更改。
+      </p>
+    </div>
 
     <div class="card">
       <h2>場次設定</h2>
@@ -398,11 +444,10 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
           <tbody></tbody>
         </table>
       </div>
-
     </div>
 
     <div class="card">
-      <h2>場次設定</h2>
+      <h2>場次控制</h2>
       <div class="btn-col">
         <button id="nextSessionBtn" class="btn warn">下一場</button>
         <button id="resetBtn" class="btn danger">重置系統</button>
@@ -411,7 +456,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
       </div>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <p class="hint">
-        「前往下一場」會自動保留兩通道目前顏色（若該顏色仍有剩餘票數）作為新場次的第一款顏色，並保留剩餘票數；已用完的顏色仍不可選用。「重置系統」需輸入管理員密碼。
+        「下一場」會自動保留兩通道目前顏色（若該顏色仍有剩餘票數）作為新場次的第一款顏色，並保留剩餘票數；已用完的顏色仍不可選用。「重置系統」需輸入管理員密碼。
       </p>
     </div>
 
@@ -465,7 +510,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 
 </main>
 <footer>
-	<p>Made by Hayson in 2026. All rights reserved</p>
+  <p>Made by Hayson in 2026. All rights reserved</p>
 </footer>
 <div id="modalOverlay" class="modal-overlay">
   <div class="modal">
@@ -489,6 +534,11 @@ const CHANNEL_NAME = 'bingoSystem';
 const TICKETS_PER_STACK = 60;
 const RESET_PASSWORD = '123456';
 
+/* 跨設備即時同步：公共 MQTT broker（免費、無需註冊） */
+const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+const ROOM_CODE_KEY = 'bingoRoomCode';
+const MQTT_TOPIC_PREFIX = 'ywcsu-bingo';
+
 const COLOR_LIST = [
   { name:'深藍',   hex:'#1B3A6B', text:'#FFFFFF' },
   { name:'淺藍',   hex:'#7EC8E3', text:'#1B3A6B' },
@@ -501,6 +551,31 @@ const COLOR_LIST = [
   { name:'紫色',   hex:'#9B5DE5', text:'#FFFFFF' }
 ];
 const COLOR_MAP = Object.fromEntries(COLOR_LIST.map(c => [c.name, c]));
+
+/* 每個分頁一個唯一 clientId，用於區分自己與其他人的訊息 */
+const CLIENT_ID = 'bingo_' + Math.random().toString(36).slice(2, 10);
+
+function generateRoomCode(){
+  const y = new Date().getFullYear();
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `YWCSU-${y}-${rand}`;
+}
+
+function sanitizeRoomCode(code){
+  const cleaned = String(code || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9\-_]/g, '')
+    .slice(0, 40);
+  return cleaned || generateRoomCode();
+}
+
+let roomCode = sanitizeRoomCode(localStorage.getItem(ROOM_CODE_KEY) || '');
+localStorage.setItem(ROOM_CODE_KEY, roomCode);
+
+/* 時間戳記：跨設備「後寫覆蓋先寫」用 */
+let lastLocalTs = 0;
+let lastRemoteTs = 0;
 
 function defaultState(){
   const colors = {};
@@ -551,7 +626,7 @@ function normalizeState(raw){
 }
 
 /* ================================================================
-   2. 多分頁同步
+   2. 狀態載入 & 持久化（含跨設備 MQTT 廣播）
    ================================================================ */
 let bc = null;
 try { bc = new BroadcastChannel(CHANNEL_NAME); } catch (e) { bc = null; }
@@ -570,29 +645,257 @@ function readLocal(){
   }
 }
 
-function persist(){
+/** 本地儲存 + 同機多分頁廣播 + 跨設備 MQTT 廣播 */
+function persist(opts){
+  opts = opts || {};
+  const now = Date.now();
+  lastLocalTs = Math.max(now, lastRemoteTs + 1); // 確保本地時間戳一定比已知遠端新
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     console.error('寫入 localStorage 失敗', e);
   }
-  if (bc) { try { bc.postMessage({ type:'sync', t: Date.now() }); } catch (e) {} }
-  const badge = document.getElementById('syncBadge');
-  if (badge) badge.textContent = '已儲存 ' + new Date().toLocaleTimeString('zh-TW', {hour12:false});
+
+  // 同機多分頁
+  if (bc) {
+    try { bc.postMessage({ type:'sync', ts: lastLocalTs, clientId: CLIENT_ID }); } catch (e) {}
+  }
+
+  // 跨設備 MQTT（retained，讓新設備一連上就拿到最新狀態）
+  if (!opts.skipRemote) {
+    publishToMQTT();
+  }
+
+  updateSyncBadge();
 }
 
+/* ================================================================
+   3. MQTT 跨設備即時同步
+   ================================================================ */
+let mqttClient = null;
+let mqttStatus = 'offline'; // 'offline' | 'connecting' | 'online'
+let mqttGotInitial = false; // 是否已收到 retained 初始狀態
+let mqttSubscribeFallbackTimer = null;
+
+function currentTopic(){
+  return `${MQTT_TOPIC_PREFIX}/${roomCode}`;
+}
+
+function connectMQTT(){
+  // 若 mqtt.js 沒載入（例如離線、CDN 掛掉），退回同機同步
+  if (typeof mqtt === 'undefined' || !mqtt || typeof mqtt.connect !== 'function'){
+    console.warn('[MQTT] mqtt.js 未載入，跨設備同步停用（僅同機多分頁可同步）');
+    mqttStatus = 'offline';
+    updateSyncBadge();
+    updateRoomCardStatus();
+    return;
+  }
+
+  // 先斷開舊連線
+  if (mqttClient){
+    try { mqttClient.end(true); } catch (e) {}
+    mqttClient = null;
+  }
+  mqttStatus = 'connecting';
+  mqttGotInitial = false;
+  updateSyncBadge();
+  updateRoomCardStatus();
+
+  const topic = currentTopic();
+
+  try {
+    mqttClient = mqtt.connect(MQTT_BROKER_URL, {
+      clientId: CLIENT_ID,
+      clean: true,
+      connectTimeout: 8000,
+      reconnectPeriod: 3000,
+      keepalive: 30
+    });
+  } catch (e) {
+    console.error('[MQTT] 初始化失敗', e);
+    mqttStatus = 'offline';
+    updateSyncBadge();
+    updateRoomCardStatus();
+    return;
+  }
+
+  mqttClient.on('connect', () => {
+    console.log('[MQTT] 已連線，訂閱 topic:', topic);
+    mqttStatus = 'online';
+    updateSyncBadge();
+    updateRoomCardStatus();
+
+    mqttClient.subscribe(topic, { qos: 1 }, (err) => {
+      if (err) { console.warn('[MQTT] 訂閱失敗', err); return; }
+      // 訂閱完成後，等 800ms 讓 retained message 到達；
+      // 若這 800ms 內沒有任何 retained 訊息，代表這是新房間 → 推送本地狀態
+      clearTimeout(mqttSubscribeFallbackTimer);
+      mqttSubscribeFallbackTimer = setTimeout(() => {
+        if (!mqttGotInitial){
+          console.log('[MQTT] 新房間，推送本地狀態為 retained');
+          publishToMQTT();
+        }
+      }, 800);
+    });
+  });
+
+  mqttClient.on('message', (t, payload) => {
+    if (t !== topic) return;
+    let msg;
+    try {
+      msg = JSON.parse(payload.toString());
+    } catch (e) {
+      console.warn('[MQTT] 訊息解析失敗', e);
+      return;
+    }
+    // 自己的訊息忽略
+    if (msg.clientId === CLIENT_ID) return;
+
+    mqttGotInitial = true;
+    clearTimeout(mqttSubscribeFallbackTimer);
+
+    // 舊訊息忽略
+    if (typeof msg.ts !== 'number') return;
+    if (msg.ts <= lastRemoteTs) return;
+    // 比本地更舊的訊息忽略（避免覆蓋本地剛做的修改）
+    if (msg.ts <= lastLocalTs) {
+      lastRemoteTs = Math.max(lastRemoteTs, msg.ts);
+      return;
+    }
+
+    lastRemoteTs = msg.ts;
+    state = normalizeState(msg.state);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+    renderAll();
+    updateSyncBadge('收到遠端更新');
+    updateRoomCardStatus();
+  });
+
+  mqttClient.on('reconnect', () => {
+    mqttStatus = 'connecting';
+    updateSyncBadge();
+    updateRoomCardStatus();
+  });
+  mqttClient.on('close', () => {
+    if (mqttStatus !== 'offline'){
+      mqttStatus = 'offline';
+      updateSyncBadge();
+      updateRoomCardStatus();
+    }
+  });
+  mqttClient.on('offline', () => {
+    mqttStatus = 'offline';
+    updateSyncBadge();
+    updateRoomCardStatus();
+  });
+  mqttClient.on('error', (err) => {
+    console.warn('[MQTT] 錯誤', err && err.message);
+    updateSyncBadge();
+    updateRoomCardStatus();
+  });
+}
+
+/** 把目前 state 推送到 MQTT（retained） */
+function publishToMQTT(){
+  if (!mqttClient || !mqttClient.connected) return;
+  const topic = currentTopic();
+  try {
+    mqttClient.publish(topic, JSON.stringify({
+      ts: lastLocalTs || Date.now(),
+      clientId: CLIENT_ID,
+      state
+    }), { qos: 1, retain: true });
+  } catch (e) {
+    console.warn('[MQTT] 發布失敗', e);
+  }
+}
+
+/** 從其他分頁（同機）收到更新 */
 function onExternalChange(){
-  state = normalizeState(readLocal());
+  const remote = normalizeState(readLocal());
+  // 同機廣播沒有時間戳比較，直接採用（LocalStorage 已是最新）
+  state = remote;
   renderAll();
+  updateRoomCardStatus();
 }
 
-if (bc) bc.onmessage = () => onExternalChange();
+if (bc) {
+  bc.onmessage = (ev) => {
+    if (ev.data && ev.data.clientId === CLIENT_ID) return;
+    onExternalChange();
+  };
+}
 window.addEventListener('storage', (e) => {
   if (e.key === STORAGE_KEY) onExternalChange();
+  if (e.key === ROOM_CODE_KEY) {
+    roomCode = sanitizeRoomCode(e.newValue || '');
+    updateSyncBadge();
+    updateRoomCardStatus();
+    connectMQTT();
+  }
 });
 
 /* ================================================================
-   3. 小工具
+   4. 連線狀態 UI
+   ================================================================ */
+let _badgeTransient = null;
+
+function updateSyncBadge(transientText){
+  const el = document.getElementById('syncBadge');
+  const statusEl = el && el.querySelector('.sb-status');
+  const roomEl = document.getElementById('syncRoomLabel');
+  if (!el || !statusEl) return;
+
+  el.classList.remove('online','offline','connecting');
+
+  let cls, text;
+  if (mqttStatus === 'online'){
+    cls = 'online';
+    text = '已連接';
+  } else if (mqttStatus === 'connecting'){
+    cls = 'connecting';
+    text = '連線中…';
+  } else {
+    cls = 'offline';
+    text = '離線（僅同機同步）';
+  }
+  el.classList.add(cls);
+
+  if (transientText){
+    statusEl.textContent = transientText;
+    clearTimeout(_badgeTransient);
+    _badgeTransient = setTimeout(() => updateSyncBadge(), 1800);
+  } else {
+    statusEl.textContent = text;
+  }
+
+  if (roomEl) roomEl.textContent = 'ROOM // ' + roomCode;
+  updateRoomCardStatus();
+}
+
+function updateRoomCardStatus(){
+  const cardStatus = document.getElementById('roomCardStatus');
+  const codeDisplay = document.getElementById('roomCodeDisplay');
+  if (codeDisplay) codeDisplay.textContent = roomCode;
+  if (cardStatus){
+    if (mqttStatus === 'online'){
+      cardStatus.textContent = '● 已連線（跨設備即時同步啟用）';
+      cardStatus.style.color = '#15803d';
+    } else if (mqttStatus === 'connecting'){
+      cardStatus.textContent = '● 連線中…';
+      cardStatus.style.color = '#b45309';
+    } else {
+      cardStatus.textContent = '● 未連線（僅同機多分頁同步）';
+      cardStatus.style.color = '#b91c1c';
+    }
+  }
+}
+
+/* ================================================================
+   5. 小工具
    ================================================================ */
 const $  = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -622,7 +925,7 @@ function addLog(action){
   if (state.logs.length > 20) state.logs.length = 20;
 }
 
-function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false){
+function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false, onOpen = null){
   return new Promise(resolve => {
     const overlay = $('#modalOverlay');
     const btnConfirm = $('#modalConfirm');
@@ -632,6 +935,11 @@ function askConfirm(title, bodyHTML, confirmText = '確定', hideCancel = false)
     btnConfirm.textContent = confirmText;
     btnCancel.style.display = hideCancel ? 'none' : '';
     overlay.classList.add('show');
+
+    if (typeof onOpen === 'function'){
+      setTimeout(() => { try { onOpen(overlay); } catch(e){ console.warn(e); } }, 30);
+    }
+
     function cleanup(){
       overlay.classList.remove('show');
       btnConfirm.onclick = null;
@@ -686,10 +994,8 @@ function askPassword(title, message, confirmText = '確定'){
 }
 
 /* ================================================================
-   4. 業務邏輯
+   6. 業務邏輯
    ================================================================ */
-
-/* 計算某顏色「目前這一疊」的剩餘票數（0～60） */
 function getCurrentStackRemaining(colorName){
   const info = state.colors[colorName];
   if (!info || info.stacks <= 0 || info.remaining <= 0) return 0;
@@ -699,7 +1005,6 @@ function getCurrentStackRemaining(colorName){
   return TICKETS_PER_STACK - usedInCurrentStack;
 }
 
-/* 依「目前這一疊的剩餘票數」換算成該顏色的全域 remaining */
 function calcGlobalRemainingFromStack(colorName, stackRemain){
   const info = state.colors[colorName];
   const total = info.stacks * TICKETS_PER_STACK;
@@ -709,7 +1014,6 @@ function calcGlobalRemainingFromStack(colorName, stackRemain){
   return Math.max(0, Math.min(total, total - newUsed));
 }
 
-/* 剩餘疊數顯示：整疊 + 散票，例如「2 + (40 張)」「1 疊」「0 疊」 */
 function formatRemainingStacks(remaining){
   if (remaining <= 0){
     return '<span class="sr-out">0 疊</span>';
@@ -722,7 +1026,6 @@ function formatRemainingStacks(remaining){
   return `<span class="sr-main">${fullStacks}</span> + <span class="sr-loose">(${loose} 張)</span>`;
 }
 
-/* 推薦顏色：排除本場已用與剩餘 0，優先剩餘最少，同票數依固定色序 */
 function getRecommendedColor(){
   const candidates = COLOR_LIST.filter(c =>
     state.colors[c.name].remaining > 0 && !state.usedThisSession.includes(c.name)
@@ -737,8 +1040,6 @@ function getRecommendedColor(){
   return candidates[0].name;
 }
 
-/* 套用顏色（切換時自動結算舊顏色本疊剩餘）
-   ★ 只要舊顏色「本疊還有剩票（含整疊未用）」，切走時視為整疊用完並扣除 */
 function applyColor(ch, colorName){
   const channelLabel = ch === 'cash' ? '現金通道' : '電子支付通道';
   const oldColor = state.channels[ch].currentColor;
@@ -798,7 +1099,8 @@ async function selectColor(ch, colorName, skipConfirm = false){
       `<p>將 <b>${thisLabel}</b> 的目前顏色設為：</p>
        <div class="modal-swatch" style="background:${c.hex};color:${c.text}">${esc(colorName)}</div>
        <p>此顏色目前全域剩餘 <b>${state.colors[colorName].remaining}</b> 張，選用後將標記為「本場已使用」。</p>
-       ${oldDesc}`,
+       ${oldDesc}
+       <p class="hint">此操作會即時同步到所有裝置。</p>`,
       '確定切換');
     if (!ok) return;
   }
@@ -855,7 +1157,7 @@ async function submitRemain(ch){
      <p>本疊剩餘：<b>${oldStackRemain}</b> → <b>${val}</b> 張</p>
      <p>該顏色全域剩餘：${info.remaining} → <b>${newRemain}</b> 張（${formatRemainingStacks(newRemain)}）</p>
      ${newRemain === 0 ? '<p class="warn-text">全域剩餘歸零，該顏色將標記為「已用完」。</p>' : ''}
-     <p class="hint">此操作會即時同步到所有頁面。</p>`,
+     <p class="hint">此操作會即時同步到所有裝置。</p>`,
     '確定登記');
   if (!ok){ renderChannel(ch); return; }
 
@@ -866,7 +1168,7 @@ async function submitRemain(ch){
 }
 
 /* ================================================================
-   5. 渲染：設定頁
+   7. 渲染：設定頁
    ================================================================ */
 function renderAdmin(){
   const noInput = $('#sessionNoInput');
@@ -937,7 +1239,7 @@ async function applyRowChanges(colorName){
       `<p>「<b>${esc(colorName)}</b>」的疊數將由 <b>${info.stacks}</b> 改為 <b>${newStacks}</b>。</p>
        <p>總票數：${info.total} → <b>${newTotal}</b>（每疊 ${TICKETS_PER_STACK} 張）</p>
        <p>剩餘票數：${info.remaining} → <b>${calcRemain}</b>（依增減疊數自動重算）</p>
-       <p class="hint">此操作會立即同步到所有頁面。</p>`,
+       <p class="hint">此操作會立即同步到所有裝置。</p>`,
       '確定套用');
     if (!ok){ renderAdmin(); return; }
 
@@ -965,7 +1267,7 @@ async function applyRowChanges(colorName){
 }
 
 /* ================================================================
-   6. 渲染：通道頁
+   8. 渲染：通道頁
    ================================================================ */
 function channelInnerHTML(title, icon){
   return `
@@ -982,8 +1284,8 @@ function channelInnerHTML(title, icon){
     </div>
 
     <div class="card">
-      <h2操作</h2>
-      <button class="btn primary full recommend-btn">System推薦下一款顏色</button>
+      <h2>操作</h2>
+      <button class="btn primary full recommend-btn">System 推薦下一款顏色</button>
 
       <div class="field">
         <label>手動選擇顏色（僅列出本場未使用且仍有票的顏色）</label>
@@ -1080,7 +1382,7 @@ function renderChannel(ch){
 }
 
 /* ================================================================
-   7. 渲染：顯示看板
+   9. 渲染：顯示看板
    ================================================================ */
 function renderBoard(){
   const nameSuffix = state.sessionName ? `　${state.sessionName}` : '';
@@ -1134,20 +1436,109 @@ function renderBoard(){
 }
 
 /* ================================================================
-   8. 總渲染
+   10. 總渲染
    ================================================================ */
 function renderAll(){
   renderAdmin();
   renderChannel('cash');
   renderChannel('epay');
   renderBoard();
+  updateRoomCardStatus();
 }
 
 /* ================================================================
-   9. 事件綁定
+   11. 房間碼管理
    ================================================================ */
+async function openRoomManager(){
+  const statusText = mqttStatus === 'online' ? '已連線' :
+                     mqttStatus === 'connecting' ? '連線中…' : '未連線';
+  const bodyHTML = `
+    <p>房間碼用於讓多台裝置即時同步同一份資料。</p>
+    <p>所有要同步的裝置，請使用<b>相同房間碼</b>。</p>
+    <div class="row" style="margin-top:12px">
+      <div class="field" style="flex:1;min-width:200px">
+        <label>房間碼（可自訂）</label>
+        <input type="text" id="roomCodeInput" value="${esc(roomCode)}"
+               maxlength="40" style="font-family:'JetBrains Mono',monospace;letter-spacing:.1em">
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="btn small" id="copyRoomBtn">複製</button>
+      <button type="button" class="btn small" id="newRoomBtn">產生新房間碼</button>
+    </div>
+    <p class="hint">
+      目前連線：<b>${statusText}</b><br>
+      建議使用「活動名稱-隨機碼」格式，例如 YWCSU-2026-A3F9。
+    </p>
+  `;
+  let finalValue = null;
+  await new Promise(resolve => {
+    const overlay = $('#modalOverlay');
+    const btnConfirm = $('#modalConfirm');
+    const btnCancel = $('#modalCancel');
+    $('#modalTitle').textContent = '房間連線管理';
+    $('#modalBody').innerHTML = bodyHTML;
+    btnConfirm.textContent = '套用並重連';
+    btnCancel.style.display = '';
+    btnCancel.textContent = '取消';
+    overlay.classList.add('show');
 
-/* 分頁切換 */
+    const input = $('#roomCodeInput');
+    const copyBtn = $('#copyRoomBtn');
+    const newBtn = $('#newRoomBtn');
+
+    copyBtn.onclick = () => {
+      const val = input.value.trim();
+      if (!val) return;
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(val).then(
+          () => toast('已複製房間碼'),
+          () => toast('複製失敗，請手動選取')
+        );
+      } else {
+        input.select();
+        try { document.execCommand('copy'); toast('已複製'); }
+        catch(e){ toast('複製失敗，請手動選取'); }
+      }
+    };
+    newBtn.onclick = () => {
+      input.value = generateRoomCode();
+      toast('已產生新房間碼，按「套用並重連」生效');
+    };
+
+    function cleanup(){
+      overlay.classList.remove('show');
+      btnConfirm.onclick = null;
+      btnCancel.onclick = null;
+      overlay.onclick = null;
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e){
+      if (e.key === 'Escape'){ e.preventDefault(); cleanup(); resolve(); }
+      else if (e.key === 'Enter'){ e.preventDefault(); finalValue = input.value; cleanup(); resolve(); }
+    }
+    btnConfirm.onclick = () => { finalValue = input.value; cleanup(); resolve(); };
+    btnCancel.onclick = () => { finalValue = null; cleanup(); resolve(); };
+    overlay.onclick = (e) => { if (e.target === overlay){ finalValue = null; cleanup(); resolve(); } };
+    document.addEventListener('keydown', onKey);
+  });
+
+  if (finalValue === null) return;
+  const newCode = sanitizeRoomCode(finalValue);
+  if (newCode === roomCode){
+    toast('房間碼沒有變更');
+    return;
+  }
+  roomCode = newCode;
+  localStorage.setItem(ROOM_CODE_KEY, roomCode);
+  updateSyncBadge('切換房間中…');
+  toast('已切換房間：' + roomCode);
+  connectMQTT();
+}
+
+/* ================================================================
+   12. 事件綁定
+   ================================================================ */
 $$('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     $$('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1159,7 +1550,6 @@ $$('.tab-btn').forEach(btn => {
   });
 });
 
-/* 操作者名稱 */
 const opInput = $('#operatorInput');
 opInput.value = operator;
 opInput.addEventListener('input', () => {
@@ -1167,7 +1557,20 @@ opInput.addEventListener('input', () => {
   sessionStorage.setItem('bingoOperator', operator);
 });
 
-/* 場次設定 */
+/* 連線徽章點擊 → 房間管理 */
+$('#syncBadge').addEventListener('click', openRoomManager);
+$('#manageRoomBtn').addEventListener('click', openRoomManager);
+$('#copyRoomBtn').addEventListener('click', () => {
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(roomCode).then(
+      () => toast('已複製房間碼：' + roomCode),
+      () => toast('複製失敗')
+    );
+  } else {
+    toast('房間碼：' + roomCode);
+  }
+});
+
 $('#saveSessionBtn').addEventListener('click', () => {
   const no = Math.max(1, Math.floor(Number($('#sessionNoInput').value) || 1));
   const nm = $('#sessionNameInput').value.trim();
@@ -1179,7 +1582,6 @@ $('#saveSessionBtn').addEventListener('click', () => {
   renderAll();
 });
 
-/* 表格套用 */
 $('#adminTable').addEventListener('click', (e) => {
   const btn = e.target.closest('.apply-row');
   if (!btn) return;
@@ -1188,7 +1590,6 @@ $('#adminTable').addEventListener('click', (e) => {
   applyRowChanges(tr.dataset.color);
 });
 
-/* 前往下一場：保留兩通道目前顏色作為新場次第一款顏色 */
 $('#nextSessionBtn').addEventListener('click', async () => {
   const cashColor = state.channels.cash.currentColor;
   const epayColor = state.channels.epay.currentColor;
@@ -1218,7 +1619,8 @@ $('#nextSessionBtn').addEventListener('click', async () => {
        ${keepDesc.length
          ? `<li>通道顏色自動沿用為新場次第一款顏色，不需重新選擇：<br>${keepDesc.map(s => '・' + s).join('<br>')}</li>`
          : '<li>兩通道目前沒有可沿用的顏色（未選擇或已用完），新場次請重新選擇。</li>'}
-     </ul>`,
+     </ul>
+     <p class="hint">此操作會即時同步到所有裝置。</p>`,
     '確定前往下一場');
   if (!ok) return;
 
@@ -1234,7 +1636,6 @@ $('#nextSessionBtn').addEventListener('click', async () => {
   state.sessionName = '';
   state.usedThisSession = [];
 
-  /* 保留通道顏色：若該顏色仍有剩餘票數，則自動繼續作為新場次第一款顏色 */
   if (cashColor && state.colors[cashColor] && state.colors[cashColor].remaining > 0){
     state.channels.cash.currentColor = cashColor;
     state.usedThisSession.push(cashColor);
@@ -1257,7 +1658,6 @@ $('#nextSessionBtn').addEventListener('click', async () => {
   toast('已進入第 ' + state.sessionNo + ' 場');
 });
 
-/* 重置整個系統（需密碼） */
 $('#resetBtn').addEventListener('click', async () => {
   const pw = await askPassword('重置整個系統',
     '請輸入管理員密碼以確認重置：',
@@ -1272,7 +1672,6 @@ $('#resetBtn').addEventListener('click', async () => {
   toast('系統已重置');
 });
 
-/* 匯出 JSON */
 $('#exportBtn').addEventListener('click', () => {
   const data = JSON.stringify(state, null, 2);
   const blob = new Blob([data], { type: 'application/json' });
@@ -1294,7 +1693,6 @@ $('#exportBtn').addEventListener('click', () => {
   toast('已下載備份檔');
 });
 
-/* 匯入 JSON */
 $('#importBtn').addEventListener('click', () => $('#importFile').click());
 $('#importFile').addEventListener('change', (e) => {
   const file = e.target.files && e.target.files[0];
@@ -1312,7 +1710,7 @@ $('#importFile').addEventListener('change', (e) => {
     const ok = await askConfirm('匯入資料',
       `<p>確定要用此檔案的內容<b>覆蓋目前所有資料</b>嗎？</p>
        <p class="hint">檔名：${esc(file.name)}</p>
-       <p class="hint">覆蓋後所有分頁都會同步更新。</p>`,
+       <p class="hint">覆蓋後所有裝置都會同步更新。</p>`,
       '確定匯入');
     if (!ok){ e.target.value = ''; return; }
 
@@ -1326,7 +1724,6 @@ $('#importFile').addEventListener('change', (e) => {
   reader.readAsText(file);
 });
 
-/* 通道頁事件委派 */
 ['cash','epay'].forEach(ch => {
   const sec = $('#page-' + ch);
   if (!sec) return;
@@ -1346,7 +1743,6 @@ $('#importFile').addEventListener('change', (e) => {
   });
 });
 
-/* 快捷鍵 R 觸發推薦 */
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'r' && e.key !== 'R') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1359,7 +1755,6 @@ document.addEventListener('keydown', (e) => {
   recommend(activePage.dataset.channel);
 });
 
-/* 看板時鐘 */
 function tickClock(){
   const el = $('#boardClock');
   if (!el) return;
@@ -1371,7 +1766,6 @@ function tickClock(){
 setInterval(tickClock, 1000);
 tickClock();
 
-/* 看板全螢幕 */
 $('#boardFsBtn').addEventListener('click', () => {
   const el = $('#page-board');
   if (!document.fullscreenElement){
@@ -1384,16 +1778,32 @@ $('#boardFsBtn').addEventListener('click', () => {
 });
 
 /* ================================================================
-   10. 初始化
+   13. 初始化
    ================================================================ */
 (function init(){
   $('#page-cash').innerHTML = channelInnerHTML('現金通道', '🟢');
   $('#page-epay').innerHTML = channelInnerHTML('電子支付通道', '🔵');
 
   if (!localStorage.getItem(STORAGE_KEY)){
-    persist();
+    // 首次使用：寫入初始狀態（不推遠端，等 MQTT 連上後視情況推送）
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   }
+
   renderAll();
+
+  // 啟動跨設備同步
+  connectMQTT();
+
+  // 每 30 秒校正一次徽章（防止某些瀏覽器事件漏接）
+  setInterval(() => {
+    if (mqttClient && mqttClient.connected && mqttStatus !== 'online'){
+      mqttStatus = 'online';
+      updateSyncBadge();
+    } else if (mqttClient && !mqttClient.connected && mqttStatus === 'online'){
+      mqttStatus = 'offline';
+      updateSyncBadge();
+    }
+  }, 30000);
 })();
 </script>
 
@@ -1402,33 +1812,49 @@ $('#boardFsBtn').addEventListener('click', () => {
  README：使用說明
 ====================================================================
 
+【核心特色：跨設備即時同步】
+ - 使用公共 MQTT broker（EMQX 免費）進行跨設備即時同步。
+ - 每場活動使用一個「房間碼」隔離資料，避免和其他人混在一起。
+ - 使用 MQTT retained message，新裝置一連上就自動取得最新狀態。
+ - 若 MQTT 斷線或無法載入（例如完全離線），會自動退回「同機多分頁同步」，
+   功能不會中斷，只是跨設備同步停用。
+
+【多設備使用流程（重點）】
+ 1) 第一台裝置（例如組長的電腦）：
+    - 打開網頁 → 右上角徽章顯示「已連接」與房間碼（例如 YWCSU-2026-A3F9）。
+    - 若未自動產生，點擊右上角徽章 → 按「產生新房間碼」→「套用並重連」。
+    - 完成組長頁的場次、疊數設定。
+ 2) 其他裝置（手機、平板、另一台電腦）：
+    - 打開同一個網頁。
+    - 點擊右上角徽章 → 把房間碼改成與第一台裝置相同 →「套用並重連」。
+    - 徽章變綠（已連接）後即完成同步。
+ 3) 之後任何一台裝置操作（選色、更新票數、換場……），
+    其他裝置會在 1 秒內自動看到更新。
+
 【各頁面用途】
- 1. 設定頁        —— 設定場次、每色疊數、手動修正剩餘票數、換場、重置、備份／還原、查看操作紀錄。
+ 1. 設定頁        —— 房間碼管理、場次設定、每色疊數、手動修正剩餘票數、換場、重置、備份／還原、查看操作紀錄。
  2. 現金通道頁    —— 選擇／推薦現金通道目前使用的顏色、登記該顏色「本疊」剩餘票數。
  3. 電子支付通道頁 —— 同上，但為電子支付通道（與現金通道顏色不可重複）。
  4. 顯示看板頁    —— 給現場大螢幕觀看：場次、時間、兩通道目前顏色、本場已出現顏色、各色剩餘票數、建議下一款。
 
 【開場前設定流程】
- 1) 開啟「設定頁」，設定場次編號與名稱後按「儲存場次」。
- 2) 在「顏色狀態總表」調整每種顏色的疊數（每疊 60 張），按「套用」並確認。
- 3) 確認各色剩餘票數正確（必要時手動覆寫）。
- 4) 切換到「顯示看板」頁，按右上角「⛶ 全螢幕」放大顯示。
+ 1) 第一台裝置開啟「設定頁」，複製房間碼。
+ 2) 其他裝置貼上同一房間碼並套用。
+ 3) 在「顏色總表」調整每種顏色的疊數（每疊 60 張），按「套用」並確認。
+ 4) 確認各色剩餘票數正確（必要時手動覆寫）。
+ 5) 切換到「顯示看板」頁，按右上角「⛶ 全螢幕」放大顯示。
 
-【顏色狀態總表的「剩餘疊數」顯示規則】
+【顏色總表的「剩餘疊數」顯示規則】
  - 有整疊 + 散票：顯示「X + (Y 張)」→ 例如 2 + (40 張)
  - 純整疊：顯示「X 疊」
  - 已用完：顯示「0 疊」（紅字）
- · 例：粉紅色 1 疊、用了 20 張 → 剩餘 40 張 → 剩餘疊數「0 + (40 張)」
- · 例：深藍色 1 疊、用了 60 張 → 剩餘 0 張 → 剩餘疊數「0 疊」，本場狀態「已用完 / 本場已用」
 
 【通道頁登記剩餘票數（重要）】
  - 本輪顏色「還在使用中」時，才需要手動登記本疊剩餘票數（0～60），用於盤點修正。
- - 要「切換到下一款顏色」時不必輸入，系統會自動把本疊剩餘（含整疊未用）視為用完並扣除：
-   · 例：深藍色 1 疊 60 張未輸入 → 切換到粉紅色時，系統自動扣 60 張 → 深藍剩 0（0 疊）
-   · 例：粉紅色 1 疊已用 20 張（剩 40 張）→ 切換到黃色時，系統自動扣 40 張 → 粉色剩 0（0 疊）
+ - 要「切換到下一款顏色」時不必輸入，系統會自動把本疊剩餘（含整疊未用）視為用完並扣除。
 
 【換場操作流程】
- 1) 在「設定頁」按「➡️ 前往下一場」。
+ 1) 在「設定頁」按「下一場」。
  2) 於二次確認視窗確認後，系統自動：
     · 場次 +1、本場已用紀錄清空並寫入歷史
     · 未用完顏色保留剩餘票數
@@ -1438,20 +1864,30 @@ $('#boardFsBtn').addEventListener('click', () => {
  3) 兩通道頁直接顯示沿用的顏色與剩餘票數，可立即繼續售票。
 
 【重置系統】
- - 在「設定頁」按「🗑️ 重置整個系統」。
+ - 在「設定頁」按「重置系統」。
  - 於彈窗輸入管理員密碼：123456。
- - 密碼正確才會執行重置，並恢復為初始狀態（9 色各 1 疊、每色 60 張、第 1 場）。
+ - 密碼正確才會執行重置，並恢復為初始狀態。
 
 【備份與還原方式】
- - 備份：設定頁 →「⬇️ 匯出 JSON 備份」→ 會下載 bingo-backup-YYYYMMDD-HHmm.json。
- - 還原：設定頁 →「⬆️ 匯入 JSON 還原」→ 選擇備份檔 → 確認覆蓋。
+ - 備份：設定頁 →「匯出 JSON 備份」→ 會下載 bingo-backup-YYYYMMDD-HHmm.json。
+ - 還原：設定頁 →「匯入 JSON 還原」→ 選擇備份檔 → 確認覆蓋。
 
 【注意事項】
  - 同一場次內，同一顏色只能出現一次（現金與電子支付合計）。
  - 換場後，兩通道沿用的顏色已自動標記為本場已用，其他顏色仍可正常選用。
  - 所有破壞性操作（變更疊數、覆寫剩餘票數、換場、重置、匯入）皆有二次確認（重置以密碼確認）。
- - 資料存於 localStorage，並以 BroadcastChannel（fallback: storage 事件）即時同步多分頁。
+ - 資料存於 localStorage（本地備份）＋ MQTT（跨設備同步）。
+ - 若多台裝置幾乎同時修改同一個欄位，以「最後送出者」為準（時間戳較新者勝）。
  - 快捷鍵：通道頁按 R 觸發推薦顏色；在剩餘票數欄位按 Enter 送出。
+
+【技術說明：跨設備同步如何運作】
+ - 使用 mqtt.js 連接 wss://broker.emqx.io:8084/mqtt（EMQX 公共免費 broker）。
+ - Topic 格式：ywcsu-bingo/<房間碼>。
+ - 每次修改：帶 {ts, clientId, state} 以 retained 方式發送。
+ - 收到訊息：若 msg.ts 比本地時間戳新 → 覆蓋本地狀態。
+ - 新裝置連上：先等待 retained 訊息（800ms），若無則推送自己的狀態為 retained，
+   避免「新開分頁瞬間把舊資料蓋掉」的問題。
+ - 同機多分頁：仍使用 BroadcastChannel + storage 事件做即時同步（速度更快、無需網路）。
 ====================================================================
 -->
 </body>
