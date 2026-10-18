@@ -509,8 +509,8 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
       <img src="logo.png" alt="YWCSU">
       <h2 style="margin-bottom:0">YWCSU Bingo</h2>
     </div>
-    <p class="login-sub">請輸入你的名字以進入<b>票務系統</b></p>
-    <input id="loginNameInput" type="text" placeholder="輸入名字" autocomplete="off" maxlength="20" spellcheck="false">
+    <p class="login-sub">請輸入你的名字以進入<b>系統</b></p>
+    <input id="loginNameInput" type="text" placeholder="輸入帳戶" autocomplete="off" maxlength="20" spellcheck="false">
     <button id="loginBtn">登 入</button>
     <p id="loginError" class="login-error" hidden></p>
   </div>
@@ -521,7 +521,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
     <img src="logo.png" alt="YWCSU" width="30" height="30">
     <h1>YWCSU Bingo 票務管理系統</h1>
     <div class="operator">
-      <label>操作者</label>
+      <label>操作者帳戶:</label>
       <span id="operatorDisplay" class="operator-name">未登入</span>
       <button id="logoutBtn" class="logout-btn" title="登出並切換使用者">登出</button>
     </div>
@@ -590,6 +590,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
           <tbody></tbody>
         </table>
       </div>
+
     </div>
 
     <div class="card">
@@ -1070,14 +1071,14 @@ function tryLogin(){
   const err = document.getElementById('loginError');
   const raw = input.value;
   if (!raw.trim()){
-    err.textContent = '請先輸入你的名字';
+    err.textContent = '請先輸入你的帳戶名稱';
     err.hidden = false;
     input.focus();
     return;
   }
   const member = findMember(raw);
   if (!member){
-    err.textContent = '名字不在允許名單中，請確認後再試';
+    err.textContent = '你並沒有進入系統的權限, 如有疑問請向票務組組長查詢';
     err.hidden = false;
     input.select();
     return;
@@ -1150,14 +1151,28 @@ function formatRemainingStacks(remaining){
   if (loose === 0) return `<span class="sr-main">${fullStacks} 疊</span>`;
   return `<span class="sr-main">${fullStacks}</span> + <span class="sr-loose">(${loose} 張)</span>`;
 }
+
+/* 自動推薦顏色：
+   1) 排除本場已用與剩餘 0 的顏色
+   2) 優先選擇「總疊數最多」的顏色（先清大庫存）
+   3) 同疊數時，選剩餘票數較少者（快用完的先清）
+   4) 同疊數同剩餘時，依固定色序
+*/
 function getRecommendedColor(){
   const candidates = COLOR_LIST.filter(c =>
     state.colors[c.name].remaining > 0 && !state.usedThisSession.includes(c.name)
   );
   if (!candidates.length) return null;
   candidates.sort((a, b) => {
-    const ra = state.colors[a.name].remaining, rb = state.colors[b.name].remaining;
+    const sa = state.colors[a.name].stacks;
+    const sb = state.colors[b.name].stacks;
+    /* 1. 疊數多的優先 */
+    if (sa !== sb) return sb - sa;
+    /* 2. 同疊數時，剩餘少的優先 */
+    const ra = state.colors[a.name].remaining;
+    const rb = state.colors[b.name].remaining;
     if (ra !== rb) return ra - rb;
+    /* 3. 同疊數、同剩餘時，依固定色序 */
     return COLOR_LIST.indexOf(a) - COLOR_LIST.indexOf(b);
   });
   return candidates[0].name;
@@ -1250,11 +1265,14 @@ async function recommend(ch){
       '知道了', true);
     return;
   }
-  const c = COLOR_MAP[pick], remain = state.colors[pick].remaining;
+  const c = COLOR_MAP[pick];
+  const info = state.colors[pick];
+  const remain = info.remaining;
+  const stacks = info.stacks;
   const ok = await askConfirm('自動推薦下一款顏色',
-    `<p>推薦邏輯：排除本場已用與已用完的顏色，優先選擇<b>剩餘票數最少</b>者（先清庫存）。</p>
+    `<p>推薦邏輯：排除本場已用與已用完的顏色，優先選擇<b>總疊數最多</b>者（先清大庫存）；同疊數時選剩餘票數較少者。</p>
      <div class="modal-swatch" style="background:${c.hex};color:${c.text}">${esc(pick)}</div>
-     <p>此顏色目前全域剩餘 <b>${remain}</b> 張（${formatRemainingStacks(remain)}）。</p>
+     <p>此顏色目前共 <b>${stacks}</b> 疊、全域剩餘 <b>${remain}</b> 張（${formatRemainingStacks(remain)}）。</p>
      <p>是否採用此顏色？</p>`,
     '採用此顏色');
   if (!ok) return;
