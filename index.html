@@ -165,7 +165,7 @@ input{font-family:inherit;font-size:16px}
 .tab:hover{background:rgba(255,255,255,.1)}
 .tab.active{background:#fff;color:#1B3A6B;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .tab .tab-sub{display:block;font-size:10px;font-weight:400;opacity:.7;margin-top:1px}
-footer{text-align:center;padding:20px;background-color:#fffdd9;font-size:12px;color:#8a93a6}
+footer{text-align:center;padding:20px;background-color:#f1f1f1;font-size:12px;color:#8a93a6}
 
 /* ============================================================
    版面與卡片
@@ -509,7 +509,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
       <img src="logo.png" alt="YWCSU">
       <h2 style="margin-bottom:0">YWCSU Bingo</h2>
     </div>
-    <p class="login-sub">請輸入你的帳號名稱以進入<b>系統</b></p>
+    <p class="login-sub">請輸入你的名字以進入<b>系統</b></p>
     <input id="loginNameInput" type="text" placeholder="輸入帳戶" autocomplete="off" maxlength="20" spellcheck="false">
     <button id="loginBtn">登 入</button>
     <p id="loginError" class="login-error" hidden></p>
@@ -532,10 +532,10 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
     </span>
   </div>
   <nav class="tab-bar">
-    <button class="tab tab-btn active" data-tab="admin">設定<span class="tab-sub">設定／庫存／備份</span></button>
-    <button class="tab tab-btn" data-tab="cash">現金通道<span class="tab-sub">售票操作</span></button>
-    <button class="tab tab-btn" data-tab="epay">電子支付<span class="tab-sub">售票操作</span></button>
-    <button class="tab tab-btn" data-tab="board">顯示看板<span class="tab-sub">現場大螢幕</span></button>
+    <button class="tab tab-btn active" data-tab="admin">設定
+    <button class="tab tab-btn" data-tab="cash">現金通道
+    <button class="tab tab-btn" data-tab="epay">電子支付
+    <button class="tab tab-btn" data-tab="board">顯示看板
   </nav>
 </header>
 
@@ -545,9 +545,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 
     <div class="card">
       <h2>房間連線<span class="h2-tag" id="roomCardStatus">檢查中…</span></h2>
-      <p class="hint" style="margin-top:0">
-        房間碼用於讓多台裝置（手機、平板、電腦）即時同步同一份資料。所有要同步的裝置，請輸入<b>相同房間碼</b>。
-      </p>
+
       <div class="row" style="margin-top:10px">
         <div class="field" style="flex:1;min-width:220px">
           <label>當前房間碼</label>
@@ -555,10 +553,9 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
         </div>
         <button id="copyRoomBtn" class="btn">複製</button>
         <button id="manageRoomBtn" class="btn primary">更改房間碼</button>
+        <button id="memberListBtn" class="btn primary" style="display:none;">查看房間成員</button>
       </div>
-      <p class="hint">
-       更換房間碼後，本裝置會切到新房間，其他裝置請一併更改。
-      </p>
+
     </div>
 
     <div class="card">
@@ -574,7 +571,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
         </div>
         <button id="saveSessionBtn" class="btn primary" style="align-self:flex-end">儲存場次</button>
       </div>
-      <p class="hint">場次名稱會顯示在看板標題列。</p>
+
     </div>
 
     <div class="card">
@@ -716,6 +713,21 @@ const COLOR_MAP = Object.fromEntries(COLOR_LIST.map(c => [c.name, c]));
 
 const CLIENT_ID = 'bingo_' + Math.random().toString(36).slice(2, 10);
 
+/* ================================================================
+   Presence（房間成員）常數
+   - 所有登入用戶每 20 秒發一次心跳
+   - 60 秒內有心跳算在線
+   - 只有 setting 帳號訂閱並顯示名單
+   ================================================================ */
+const PRESENCE_SUFFIX = 'presence';
+const PRESENCE_HEARTBEAT_INTERVAL = 20000;
+const PRESENCE_TIMEOUT = 60000;
+const SETTING_ACCOUNT = 'setting';
+
+let presenceInterval = null;
+let settingPresenceSubscribed = false;
+const onlineMembers = new Map(); // clientId -> { name, lastSeen }
+
 function generateRoomCode(){
   const y = new Date().getFullYear();
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -816,7 +828,149 @@ function persist(opts){
 }
 
 /* ================================================================
-   3. MQTT 跨設備即時同步
+   3. Presence 相關函式（房間成員）
+   ================================================================ */
+function presenceTopicAll(){
+  return `${MQTT_TOPIC_PREFIX}/${roomCode}/${PRESENCE_SUFFIX}/${CLIENT_ID}`;
+}
+function presenceTopicWildcard(){
+  return `${MQTT_TOPIC_PREFIX}/${roomCode}/${PRESENCE_SUFFIX}/+`;
+}
+
+function startPresenceHeartbeat(){
+  stopPresenceHeartbeat();
+  if (!operator || operator === '未登入') return;
+  publishPresence();
+  presenceInterval = setInterval(publishPresence, PRESENCE_HEARTBEAT_INTERVAL);
+}
+function stopPresenceHeartbeat(){
+  if (presenceInterval){
+    clearInterval(presenceInterval);
+    presenceInterval = null;
+  }
+}
+function publishPresence(){
+  if (!mqttClient || !mqttClient.connected) return;
+  if (!operator || operator === '未登入') return;
+  try {
+    mqttClient.publish(presenceTopicAll(), JSON.stringify({
+      clientId: CLIENT_ID,
+      name: operator,
+      ts: Date.now()
+    }), { qos: 0, retain: false });
+  } catch (e) {}
+}
+
+function subscribePresenceIfSetting(){
+  if (operator !== SETTING_ACCOUNT) return;
+  if (!mqttClient || !mqttClient.connected) return;
+  if (settingPresenceSubscribed) return;
+  mqttClient.subscribe(presenceTopicWildcard(), { qos: 0 }, (err) => {
+    if (!err){
+      settingPresenceSubscribed = true;
+      console.log('[Presence] 已訂閱房間成員通道');
+    }
+  });
+}
+function unsubscribePresence(){
+  settingPresenceSubscribed = false;
+  onlineMembers.clear();
+  if (mqttClient && mqttClient.connected){
+    try { mqttClient.unsubscribe(presenceTopicWildcard()); } catch(e){}
+  }
+}
+
+function handlePresenceMessage(t, payload){
+  const prefix = `${MQTT_TOPIC_PREFIX}/${roomCode}/${PRESENCE_SUFFIX}/`;
+  if (!t.startsWith(prefix)) return false;
+  if (t === presenceTopicAll()) return true; // 自己的心跳，忽略
+
+  try {
+    const msg = JSON.parse(payload.toString());
+    if (msg && msg.clientId && msg.name && Number.isFinite(msg.ts)){
+      onlineMembers.set(msg.clientId, {
+        name: msg.name,
+        lastSeen: msg.ts
+      });
+    }
+  } catch (e) {}
+  return true;
+}
+
+/* 顯示/隱藏「查看房間成員」按鈕 */
+function updateMemberBtnVisibility(){
+  const btn = document.getElementById('memberListBtn');
+  if (!btn) return;
+  btn.style.display = (operator === SETTING_ACCOUNT) ? '' : 'none';
+}
+
+/* 顯示房間成員名單 */
+async function showMemberList(){
+  if (operator !== SETTING_ACCOUNT){
+    await askConfirm('權限不足', '<p>只有 <b>setting</b> 帳號可以使用此功能。</p>', '知道了', true);
+    return;
+  }
+  const now = Date.now();
+
+  const byName = new Map();
+  let totalClients = 0;
+
+  onlineMembers.forEach((v) => {
+    if (now - v.lastSeen <= PRESENCE_TIMEOUT){
+      totalClients++;
+      if (!byName.has(v.name)){
+        byName.set(v.name, { name: v.name, count: 0, lastSeen: 0 });
+      }
+      const rec = byName.get(v.name);
+      rec.count++;
+      rec.lastSeen = Math.max(rec.lastSeen, v.lastSeen);
+    }
+  });
+
+  /* 把自己也加入（如果自己還沒發過心跳或已超時） */
+  if (!byName.has(operator)){
+    byName.set(operator, { name: operator, count: 1, lastSeen: now });
+    totalClients++;
+  }
+
+  const arr = Array.from(byName.values()).sort((a, b) => {
+    if (a.name === operator) return -1;
+    if (b.name === operator) return 1;
+    return b.lastSeen - a.lastSeen;
+  });
+
+  let bodyHTML = `
+    <p>房間碼：<b style="color:#1B3A6B">${esc(roomCode)}</b></p>
+    <p>在線帳戶：<b style="color:#c26a00">${arr.length}</b> 位（共 ${totalClients} 個分頁）</p>
+    <p class="hint" style="margin-top:4px">更新時間：${new Date(now).toLocaleTimeString('zh-TW', {hour12:false})}</p>
+    <hr style="margin:12px 0;border:none;border-top:1px dashed #d8dfeb;">
+  `;
+
+  if (arr.length === 0){
+    bodyHTML += `<p class="hint">目前沒有偵測到任何在線帳戶。</p>`;
+  } else {
+    bodyHTML += `<ul style="list-style:none;padding:0;margin:0;">`;
+    arr.forEach(item => {
+      const isSelf = item.name === operator;
+      const secsAgo = Math.round((now - item.lastSeen) / 1000);
+      const agoText = secsAgo < 5 ? '剛剛' : `${secsAgo} 秒前`;
+      bodyHTML += `
+        <li style="padding:8px 4px;border-bottom:1px dashed #e6ebf4;display:flex;align-items:center;gap:8px;">
+          <b style="color:#1B3A6B;font-size:14px;">${esc(item.name)}</b>
+          ${isSelf ? '<span style="color:#2e9e6b;font-size:11px;font-weight:700;">（自己）</span>' : ''}
+          ${item.count > 1 ? `<span style="color:#c26a00;font-size:12px;font-weight:700;">×${item.count} 個分頁</span>` : ''}
+          <span style="color:#9aa3b5;font-size:11px;margin-left:auto;">${agoText}</span>
+        </li>
+      `;
+    });
+    bodyHTML += `</ul>`;
+  }
+
+  await askConfirm('房間成員', bodyHTML, '關閉', true);
+}
+
+/* ================================================================
+   4. MQTT 跨設備即時同步
    ================================================================ */
 let mqttClient = null;
 let mqttStatus = 'offline';
@@ -832,6 +986,7 @@ function connectMQTT(){
   }
   if (mqttClient){ try { mqttClient.end(true); } catch (e) {} mqttClient = null; }
   mqttStatus = 'connecting'; mqttGotInitial = false;
+  settingPresenceSubscribed = false;
   updateSyncBadge(); updateRoomCardStatus();
 
   const topic = currentTopic();
@@ -855,9 +1010,17 @@ function connectMQTT(){
         if (!mqttGotInitial){ console.log('[MQTT] 新房間，推送本地狀態為 retained'); publishToMQTT(); }
       }, 800);
     });
+
+    /* Presence 心跳 & setting 訂閱 */
+    startPresenceHeartbeat();
+    subscribePresenceIfSetting();
   });
 
   mqttClient.on('message', (t, payload) => {
+    /* 先處理 presence 訊息 */
+    if (handlePresenceMessage(t, payload)) return;
+
+    /* 主 topic 處理 */
     if (t !== topic) return;
     let msg;
     try { msg = JSON.parse(payload.toString()); } catch (e) { return; }
@@ -911,7 +1074,7 @@ window.addEventListener('storage', (e) => {
 });
 
 /* ================================================================
-   4. 連線狀態 UI
+   5. 連線狀態 UI
    ================================================================ */
 let _badgeTransient = null;
 
@@ -952,7 +1115,7 @@ function updateOperatorDisplay(name){
 }
 
 /* ================================================================
-   5. 小工具
+   6. 小工具
    ================================================================ */
 const $  = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -1040,7 +1203,7 @@ function askPassword(title, message, confirmText = '確定'){
 }
 
 /* ================================================================
-   6. 登入邏輯
+   7. 登入邏輯
    ================================================================ */
 function normalizeName(s){
   return String(s || '').trim().replace(/\s+/g, '').toLowerCase();
@@ -1091,17 +1254,32 @@ function enterApp(name){
   operator = name;
   sessionStorage.setItem('bingoOperator', name);
   updateOperatorDisplay(name);
+  updateMemberBtnVisibility();
+
   hideLoginScreen();
+
   if (!appBootstrapped){
     appBootstrapped = true;
     bootstrap();
+  } else {
+    /* 已 bootstrap 過（例如頁面載入時就讀到已登入狀態）：補上訂閱與心跳 */
+    if (mqttClient && mqttClient.connected){
+      startPresenceHeartbeat();
+      subscribePresenceIfSetting();
+    }
   }
 }
 function logout(){
   sessionStorage.removeItem(LOGIN_KEY);
   sessionStorage.removeItem('bingoOperator');
+
+  /* 停止心跳 & 取消 presence 訂閱 */
+  stopPresenceHeartbeat();
+  unsubscribePresence();
+
   operator = '未登入';
   updateOperatorDisplay('未登入');
+  updateMemberBtnVisibility();
   showLoginScreen();
   toast('已登出');
 }
@@ -1115,7 +1293,7 @@ function checkExistingLogin(){
 }
 
 /* ================================================================
-   7. 業務邏輯
+   8. 業務邏輯
    ================================================================ */
 
 /* 本場已售出（= 本場消耗）= sum(max(0, 本場開始剩餘 - 目前剩餘)) */
@@ -1166,20 +1344,15 @@ function getRecommendedColor(){
   candidates.sort((a, b) => {
     const sa = state.colors[a.name].stacks;
     const sb = state.colors[b.name].stacks;
-    /* 1. 疊數多的優先 */
     if (sa !== sb) return sb - sa;
-    /* 2. 同疊數時，剩餘少的優先 */
     const ra = state.colors[a.name].remaining;
     const rb = state.colors[b.name].remaining;
     if (ra !== rb) return ra - rb;
-    /* 3. 同疊數、同剩餘時，依固定色序 */
     return COLOR_LIST.indexOf(a) - COLOR_LIST.indexOf(b);
   });
   return candidates[0].name;
 }
 
-/* 切換顏色：把舊顏色的當前這疊剩餘全部「結算」為已消耗
-   效果 = 上一疊整疊作廢（含未賣出的散票也一併算入本場已售出） */
 function applyColor(ch, colorName){
   const channelLabel = ch === 'cash' ? '現金通道' : '電子支付通道';
   const oldColor = state.channels[ch].currentColor;
@@ -1321,7 +1494,7 @@ async function submitRemain(ch){
 }
 
 /* ================================================================
-   8. 渲染
+   9. 渲染
    ================================================================ */
 function renderAdmin(){
   const noInput = $('#sessionNoInput'), nmInput = $('#sessionNameInput');
@@ -1543,11 +1716,11 @@ function renderBoard(){
 }
 function renderAll(){
   renderAdmin(); renderChannel('cash'); renderChannel('epay');
-  renderBoard(); updateRoomCardStatus();
+  renderBoard(); updateRoomCardStatus(); updateMemberBtnVisibility();
 }
 
 /* ================================================================
-   9. 房間碼管理
+   10. 房間碼管理
    ================================================================ */
 async function openRoomManager(){
   const statusText = mqttStatus === 'online' ? '已連線' : mqttStatus === 'connecting' ? '連線中…' : '未連線';
@@ -1609,7 +1782,7 @@ async function openRoomManager(){
 }
 
 /* ================================================================
-   10. 事件綁定
+   11. 事件綁定
    ================================================================ */
 $$('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1635,6 +1808,9 @@ $('#copyRoomBtn').addEventListener('click', () => {
   } else { toast('房間碼：' + roomCode); }
 });
 
+/* 查看房間成員（僅 setting 帳號可見/可用） */
+$('#memberListBtn').addEventListener('click', showMemberList);
+
 $('#saveSessionBtn').addEventListener('click', () => {
   const no = Math.max(1, Math.floor(Number($('#sessionNoInput').value) || 1));
   const nm = $('#sessionNameInput').value.trim();
@@ -1652,7 +1828,6 @@ $('#adminTable').addEventListener('click', (e) => {
   applyRowChanges(tr.dataset.color);
 });
 
-/* 在「疊數」或「剩餘票數」欄位按 Enter，等同按下「套用」 */
 $('#adminTable').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   const el = e.target;
@@ -1829,7 +2004,7 @@ $('#boardFsBtn').addEventListener('click', () => {
 });
 
 /* ================================================================
-   11. 登入畫面事件
+   12. 登入畫面事件
    ================================================================ */
 $('#loginBtn').addEventListener('click', tryLogin);
 $('#loginNameInput').addEventListener('keydown', (e) => {
@@ -1837,7 +2012,7 @@ $('#loginNameInput').addEventListener('keydown', (e) => {
 });
 
 /* ================================================================
-   12. 初始化
+   13. 初始化
    ================================================================ */
 function bootstrap(){
   $('#page-cash').innerHTML = channelInnerHTML('現金通道');
@@ -1858,6 +2033,7 @@ function bootstrap(){
 
 (function init(){
   updateOperatorDisplay(operator);
+  updateMemberBtnVisibility();
   if (!checkExistingLogin()){
     showLoginScreen();
   }
