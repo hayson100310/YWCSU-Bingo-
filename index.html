@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>YWCSU Bingo 票務管理系統</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='%231B3A6B'/%3E%3Cg fill='%23FFD93D'%3E%3Ccircle cx='22' cy='22' r='6'/%3E%3Ccircle cx='42' cy='22' r='6'/%3E%3Ccircle cx='22' cy='42' r='6'/%3E%3Ccircle cx='42' cy='42' r='6'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='5' fill='%23E63946'/%3E%3C/svg%3E">
+<link rel="icon" href="logo.png" type="image/x-icon">
 <style>
 /* ============================================================
    全域設定
@@ -370,7 +370,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
   <section id="page-admin" class="page active">
 
     <div class="card">
-      <h2>📅 場次設定</h2>
+      <h2>場次設定</h2>
       <div class="row">
         <div class="field" style="flex:0 0 130px">
           <label for="sessionNoInput">場次編號</label>
@@ -386,7 +386,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
     </div>
 
     <div class="card">
-      <h2>🎨 顏色狀態總表<span class="h2-tag">每疊 60 張</span></h2>
+      <h2>顏色總表<span class="h2-tag">每疊 60 張</span></h2>
       <div class="table-wrap">
         <table id="adminTable">
           <thead>
@@ -402,12 +402,12 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
     </div>
 
     <div class="card">
-      <h2>⚙️ 場次控制</h2>
+      <h2>場次設定</h2>
       <div class="btn-col">
-        <button id="nextSessionBtn" class="btn warn">➡️ 前往下一場</button>
-        <button id="resetBtn" class="btn danger">🗑️ 重置整個系統</button>
-        <button id="exportBtn" class="btn">⬇️ 匯出 JSON 備份</button>
-        <button id="importBtn" class="btn">⬆️ 匯入 JSON 還原</button>
+        <button id="nextSessionBtn" class="btn warn">下一場</button>
+        <button id="resetBtn" class="btn danger">重置系統</button>
+        <button id="exportBtn" class="btn">匯出 JSON 備份</button>
+        <button id="importBtn" class="btn">匯入 JSON 還原</button>
       </div>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <p class="hint">
@@ -416,7 +416,7 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
     </div>
 
     <div class="card">
-      <h2>📜 操作紀錄<span class="h2-tag">最近 20 筆</span></h2>
+      <h2>操作紀錄<span class="h2-tag">最近 20 筆</span></h2>
       <ul id="logList" class="log-list"></ul>
     </div>
 
@@ -438,11 +438,11 @@ body.board-mode main{padding:0;overflow:hidden;max-width:none}
 
       <div class="board-channels">
         <div class="board-channel" data-ch="cash">
-          <div class="board-channel-title">🟢 現金通道</div>
+          <div class="board-channel-title">現金</div>
           <div class="board-color-box empty">尚未選擇</div>
         </div>
         <div class="board-channel" data-ch="epay">
-          <div class="board-channel-title">🔵 電子支付通道</div>
+          <div class="board-channel-title">MPay</div>
           <div class="board-color-box empty">尚未選擇</div>
         </div>
       </div>
@@ -982,8 +982,8 @@ function channelInnerHTML(title, icon){
     </div>
 
     <div class="card">
-      <h2>🎛️ 操作</h2>
-      <button class="btn primary full recommend-btn">🎲 自動推薦下一款顏色</button>
+      <h2操作</h2>
+      <button class="btn primary full recommend-btn">System推薦下一款顏色</button>
 
       <div class="field">
         <label>手動選擇顏色（僅列出本場未使用且仍有票的顏色）</label>
@@ -1006,7 +1006,7 @@ function channelInnerHTML(title, icon){
     </div>
 
     <div class="card">
-      <h2>✅ 本場已出現顏色</h2>
+      <h2>本場已出現顏色</h2>
       <div class="used-chips"></div>
       <p class="hint">同一場次內每種顏色只能出現一次（現金通道與電子支付通道合計）。</p>
     </div>
