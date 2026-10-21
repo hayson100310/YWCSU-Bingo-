@@ -725,7 +725,8 @@ const RESET_PASSWORD = '123456';
 const ALLOWED_MEMBERS = [
   '陳子燁','劉嘉謙','張銘軒','Hayson',
   '余承晞','陳樂軒','關卓軒','黃皓晴',
-  '林懷康','呂志立','葉情珍','羅楚衡','排長','梁永希','setting','test'
+  '林懷康','呂志立','葉情珍','羅楚衡','排長','梁永希','setting','test',
+  'mon'
 ];
 const LOGIN_KEY = 'bingoLoginUser';
 const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
@@ -1173,16 +1174,49 @@ function enterApp(name){
   sessionStorage.setItem('bingoOperator', name);
   updateOperatorDisplay(name);
   hideLoginScreen();
-  
+
+  // 先重置所有分頁按鈕為可見
+  const allTabBtns = $$('.tab-btn');
+  allTabBtns.forEach(btn => btn.style.display = '');
+
   const statsBtn = document.getElementById('statsTabBtn');
-  if (name === 'Hayson' || name === 'setting') {
-    statsBtn.style.display = '';
+
+  if (name === 'mon') {
+    // 只顯示「顯示看板」分頁，其餘隱藏
+    allTabBtns.forEach(btn => {
+      if (btn.dataset.tab !== 'board') btn.style.display = 'none';
+    });
+
+    // 強制切換到看板頁面
+    allTabBtns.forEach(b => b.classList.remove('active'));
+    const boardTab = document.querySelector('.tab-btn[data-tab="board"]');
+    if (boardTab) boardTab.classList.add('active');
+    $$('.page').forEach(p => p.classList.remove('active'));
+    const boardPage = document.getElementById('page-board');
+    if (boardPage) boardPage.classList.add('active');
+    document.body.classList.add('board-mode');
+
+    if (statsBtn) statsBtn.style.display = 'none';
   } else {
-    statsBtn.style.display = 'none';
-    if (document.querySelector('.page.active').id === 'page-stats') {
+    // 其他角色：恢復所有分頁顯示，再處理統計分頁
+    allTabBtns.forEach(btn => btn.style.display = '');
+    if (name === 'Hayson' || name === 'setting') {
+      if (statsBtn) statsBtn.style.display = '';
+    } else {
+      if (statsBtn) statsBtn.style.display = 'none';
+      const activePage = document.querySelector('.page.active');
+      if (activePage && activePage.id === 'page-stats') {
+        const adminTab = document.querySelector('.tab-btn[data-tab="admin"]');
+        if (adminTab) adminTab.click();
+      }
+    }
+
+    // 如果之前是 mon 登入，離開看板模式，並切回管理頁
+    if (document.getElementById('page-board').classList.contains('active')) {
       const adminTab = document.querySelector('.tab-btn[data-tab="admin"]');
       if (adminTab) adminTab.click();
     }
+    document.body.classList.remove('board-mode');
   }
 
   if (!appBootstrapped){
